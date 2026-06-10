@@ -3073,4 +3073,4 @@ CreatePremiumKeyUI(function()
 Main.Visible = true
 end)
 end
-print("[NyTro.cc] Vortex-Killer Elite + Full Theme Customization v17.0 cargado.")
+print("[HkScripts] Vortex-Killer Elite + Full Theme Customization v17.0 cargado.")
