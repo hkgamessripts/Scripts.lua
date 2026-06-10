@@ -293,7 +293,7 @@ T_BGR = "Color Fondo (R)", T_BGG = "Color Fondo (G)", T_BGB = "Color Fondo (B)",
 T_BRR = "Color Borde (R)", T_BRG = "Color Borde (G)", T_BRB = "Color Borde (B)", T_GLA = "Transparencia del Panel"
 },
 EN = {
-TITLE = "NyTro.cc",
+TITLE = "Hkscripts.cc",
 T_AIM = "🎯 Aimbot", T_VIS = "👁️ Visuals", T_LOC = "🏃 Local", T_FRM = "💰 Farming", T_WPN = "🔫 Weapons", T_WLD = "🌍 World", T_SET = "⚙️ Settings",
 S_AIM = "Aimbot (CamLock)", S_FOV = "FOV Settings", S_SILENT = "Silent Aim", S_MODS = "Weapon Mods", S_CHAR = "Character Mods",
 C_AIM = "Enable Aimbot", C_AIM_AUTO = "Auto-Aim (Always)", C_METHOD = "Aim Method", C_SMOOTH = "Mouse Smoothness", C_PRED = "Velocity Prediction", C_BPART = "Target Part", C_KEY = "Aimbot Keybind", C_STRAFE = "Target Strafe", C_MAXD = "Max Distance", C_VIS = "Wall Check", C_SHK = "Jitter (Legit)",
