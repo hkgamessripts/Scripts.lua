@@ -1,0 +1,317 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ==========================================
+-- 1. CONFIGURACIÓN VISUAL (ESTILO HKSTUDIO)
+-- ==========================================
+local ThemeColor = Color3.fromRGB(120, 80, 255)
+local BgDark = Color3.fromRGB(18, 18, 22)
+local BgLight = Color3.fromRGB(28, 28, 34)
+local TextWhite = Color3.fromRGB(220, 220, 225)
+local FovColor = Color3.fromRGB(150, 150, 150)
+
+-- ==========================================
+-- 2. CREACIÓN DE LA INTERFAZ
+-- ==========================================
+local gui = Instance.new("ScreenGui")
+gui.Name = "HkStudioGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true -- Clave para que el mouse no tenga un desvío extraño
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- HUD ARRIBA (FPS y Ping) - ARRASTRABLE
+local topHud = Instance.new("Frame")
+topHud.Size = UDim2.new(0, 250, 0, 25)
+topHud.Position = UDim2.new(0, 200, 0, 20) -- Lo movimos a la derecha para que no lo tape Roblox
+topHud.BackgroundColor3 = BgDark
+topHud.Active = true -- Permite interacciones de arrastre
+topHud.Parent = gui
+
+Instance.new("UICorner", topHud).CornerRadius = UDim.new(0, 6)
+local topStroke = Instance.new("UIStroke", topHud)
+topStroke.Color = ThemeColor
+topStroke.Thickness = 1
+
+local topText = Instance.new("TextLabel")
+topText.Size = UDim2.new(1, -10, 1, 0)
+topText.Position = UDim2.new(0, 10, 0, 0)
+topText.BackgroundTransparency = 1
+topText.TextXAlignment = Enum.TextXAlignment.Left
+topText.TextColor3 = TextWhite
+topText.Font = Enum.Font.GothamBold
+topText.TextSize = 12
+topText.Text = "HkStudio [Elite] | FPS: -- | Ping: --"
+topText.Parent = topHud
+
+-- Sistema para Arrastrar el HUD de FPS
+local draggingHud, dragInput, dragStart, startPos
+topHud.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingHud = true
+        dragStart = input.Position
+        startPos = topHud.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                draggingHud = false
+            end
+        end)
+    end
+end)
+topHud.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and draggingHud then
+        local delta = input.Position - dragStart
+        topHud.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- CÍRCULO FOV (Gris y sigue al mouse)
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, 150, 0, 150)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Parent = gui
+
+Instance.new("UICorner", fovCircle).CornerRadius = UDim.new(1, 0)
+local circleStroke = Instance.new("UIStroke", fovCircle)
+circleStroke.Color = FovColor
+circleStroke.Thickness = 1
+
+-- MENÚ PRINCIPAL
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0, 320, 0, 240)
+menuFrame.Position = UDim2.new(0.5, -160, 0.5, -120)
+menuFrame.BackgroundColor3 = BgDark
+menuFrame.Visible = false
+menuFrame.Parent = gui
+
+Instance.new("UICorner", menuFrame).CornerRadius = UDim.new(0, 8)
+local menuStroke = Instance.new("UIStroke", menuFrame)
+menuStroke.Color = ThemeColor
+menuStroke.Thickness = 1
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0, 20, 0, 0)
+title.BackgroundTransparency = 1
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = ThemeColor
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Text = "HkStudio"
+title.Parent = menuFrame
+
+-- Función para Toggles
+local function CreateToggle(name, yPos, defaultState)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -40, 0, 40)
+    frame.Position = UDim2.new(0, 20, 0, yPos)
+    frame.BackgroundColor3 = BgLight
+    frame.Parent = menuFrame
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -50, 1, 0)
+    label.Position = UDim2.new(0, 15, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextColor3 = TextWhite
+    label.Font = Enum.Font.GothamSemibold
+    label.TextSize = 14
+    label.Text = name
+    label.Parent = frame
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 30, 0, 16)
+    btn.Position = UDim2.new(1, -40, 0.5, -8)
+    btn.BackgroundColor3 = defaultState and ThemeColor or Color3.fromRGB(60, 60, 60)
+    btn.Text = ""
+    btn.Parent = frame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 12, 0, 12)
+    knob.Position = defaultState and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.Parent = btn
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    
+    return btn, knob, frame
+end
+
+local aimbotBtn, aimbotKnob = CreateToggle("Master Aimbot", 50, true)
+local wallBtn, wallKnob = CreateToggle("Wall Check", 100, true)
+
+-- Slider FOV Mejorado
+local sliderBg = Instance.new("Frame")
+sliderBg.Size = UDim2.new(1, -40, 0, 60)
+sliderBg.Position = UDim2.new(0, 20, 0, 150)
+sliderBg.BackgroundColor3 = BgLight
+sliderBg.Parent = menuFrame
+Instance.new("UICorner", sliderBg).CornerRadius = UDim.new(0, 6)
+
+local sliderTitle = Instance.new("TextLabel")
+sliderTitle.Size = UDim2.new(1, -30, 0, 30)
+sliderTitle.Position = UDim2.new(0, 15, 0, 0)
+sliderTitle.BackgroundTransparency = 1
+sliderTitle.TextXAlignment = Enum.TextXAlignment.Left
+sliderTitle.TextColor3 = TextWhite
+sliderTitle.Font = Enum.Font.GothamSemibold
+sliderTitle.TextSize = 14
+sliderTitle.Text = "FOV Radius"
+sliderTitle.Parent = sliderBg
+
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Size = UDim2.new(1, -30, 0, 6)
+sliderTrack.Position = UDim2.new(0, 15, 0, 40)
+sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+sliderTrack.Active = true
+sliderTrack.Parent = sliderBg
+Instance.new("UICorner", sliderTrack).CornerRadius = UDim.new(1, 0)
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new(0.3, 0, 1, 0)
+sliderFill.BackgroundColor3 = ThemeColor
+sliderFill.Parent = sliderTrack
+Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
+
+local sliderKnob = Instance.new("TextButton")
+sliderKnob.Size = UDim2.new(0, 14, 0, 14)
+sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+sliderKnob.Position = UDim2.new(1, 0, 0.5, 0)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderKnob.Text = ""
+sliderKnob.Parent = sliderFill
+Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
+
+-- ==========================================
+-- 3. LÓGICA DEL SISTEMA
+-- ==========================================
+local Settings = {
+    Enabled = true,
+    WallCheck = true,
+    FOVRadius = 150
+}
+local isAiming = false
+local draggingSlider = false
+
+-- Actualizar Interfaz (Toggles)
+local function ToggleSwitch(settingName, btn, knob)
+    Settings[settingName] = not Settings[settingName]
+    local isOn = Settings[settingName]
+    btn.BackgroundColor3 = isOn and ThemeColor or Color3.fromRGB(60, 60, 60)
+    knob.Position = isOn and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+    
+    if settingName == "Enabled" then
+        fovCircle.Visible = isOn
+    end
+end
+
+aimbotBtn.MouseButton1Click:Connect(function() ToggleSwitch("Enabled", aimbotBtn, aimbotKnob) end)
+wallBtn.MouseButton1Click:Connect(function() ToggleSwitch("WallCheck", wallBtn, wallKnob) end)
+
+-- Lógica del Slider Reparada
+sliderBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = false end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        menuFrame.Visible = not menuFrame.Visible
+    end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        isAiming = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mouseX = UserInputService:GetMouseLocation().X
+        local relativeX = math.clamp(mouseX - sliderTrack.AbsolutePosition.X, 0, sliderTrack.AbsoluteSize.X)
+        local percentage = relativeX / sliderTrack.AbsoluteSize.X
+        
+        sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+        Settings.FOVRadius = 50 + (percentage * 450)
+        fovCircle.Size = UDim2.new(0, Settings.FOVRadius * 2, 0, Settings.FOVRadius * 2)
+    end
+end)
+
+-- Wall Check
+local function IsVisible(targetPart)
+    if not Settings.WallCheck then return true end
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    
+    local result = workspace:Raycast(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position), rayParams)
+    if result then
+        return result.Instance:IsDescendantOf(targetPart.Parent)
+    end
+    return true
+end
+
+-- Bucle Principal (FPS Reales, FOV en Cursor y Aimbot centrado en el Mouse)
+local frameCount, step = 0, 0
+RunService.RenderStepped:Connect(function(dt)
+    -- 1. Actualizar FPS
+    step = step + dt
+    frameCount = frameCount + 1
+    if step >= 1 then
+        local ping = 0
+        pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing() * 1000) end)
+        topText.Text = string.format("HkStudio [Elite] | FPS: %d | Ping: %dms", frameCount, ping)
+        step, frameCount = 0, 0
+    end
+
+    -- 2. El Círculo se pega al Mouse exactamente
+    local mouseLoc = UserInputService:GetMouseLocation()
+    fovCircle.Position = UDim2.new(0, mouseLoc.X, 0, mouseLoc.Y)
+
+    -- 3. Aimbot (Se calcula desde la posición del Mouse)
+    if not Settings.Enabled or not isAiming then return end
+    
+    local closestTarget = nil
+    local shortestDistance = Settings.FOVRadius
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            
+            if head and humanoid and humanoid.Health > 0 then
+                -- Usamos ViewportPoint para que coincida matemáticamente con GetMouseLocation()
+                local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
+                
+                if onScreen then
+                    local targetPos2D = Vector2.new(screenPoint.X, screenPoint.Y)
+                    local distance = (mouseLoc - targetPos2D).Magnitude
+                    
+                    if distance <= Settings.FOVRadius and IsVisible(head) then
+                        if distance < shortestDistance then
+                            shortestDistance = distance
+                            closestTarget = head
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Activa la magia y sigue a la cabeza
+    if closestTarget then
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, closestTarget.Position)
+    end
+end)
