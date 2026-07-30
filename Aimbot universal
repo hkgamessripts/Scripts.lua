@@ -206,8 +206,8 @@ local logo = Instance.new("TextLabel", sidebar)
 logo.Size = UDim2.new(1, 0, 0, 60)
 logo.BackgroundTransparency = 1
 logo.TextColor3 = ThemeColor
-logo.Font = Enum.Font.Fredoka -- Fuente cambiada para HkStudio
-logo.TextSize = 22
+logo.Font = Enum.Font.GothamBlack
+logo.TextSize = 24
 logo.Text = "HkStudio"
 
 local tabContainer = Instance.new("Frame", sidebar)
@@ -347,13 +347,6 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
     fill.BackgroundColor3 = ThemeColor
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
-    -- Pelotita (Knob) añadida a la barra deslizante
-    local sliderKnob = Instance.new("Frame", track)
-    sliderKnob.Size = UDim2.new(0, 10, 0, 10)
-    sliderKnob.Position = UDim2.new(pct, -5, 0.5, -5)
-    sliderKnob.BackgroundColor3 = TextWhite
-    Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
-
     local dragging = false
     track.MouseButton1Down:Connect(function() dragging = true end)
     UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
@@ -364,7 +357,6 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
             local rel = math.clamp(mx - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
             local pctNum = rel / track.AbsoluteSize.X
             fill.Size = UDim2.new(pctNum, 0, 1, 0)
-            sliderKnob.Position = UDim2.new(pctNum, -5, 0.5, -5)
             local value = math.floor(min + (pctNum * (max - min)))
             Config[configCat][configKey] = value
             valLbl.Text = tostring(value)
