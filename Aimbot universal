@@ -7,7 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- ==========================================
--- 1. CONFIGURACIÓN Y ESTILO (HKSTUDIO)
+-- 1. CONFIGURACIÓN Y SISTEMA DE ALIANZAS
 -- ==========================================
 local ThemeColor = Color3.fromRGB(120, 80, 255)  -- Púrpura Neón
 local EnemyColor = Color3.fromRGB(255, 35, 35)   -- Rojo Neón (Enemigos)
@@ -16,10 +16,31 @@ local BgLight = Color3.fromRGB(28, 28, 34)       -- Fondo Secundario
 local TextWhite = Color3.fromRGB(220, 220, 225)
 local FovColor = Color3.fromRGB(150, 150, 150)   -- Gris Neón
 
+-- TABLA DE ALIANZAS (AQUÍ PUEDES AGREGAR MÁS EQUIPOS ALIADOS)
+local FactionAlliances = {
+    -- Fuerzas del Orden / Aliados
+    ["Police"] = "LawEnforcement",
+    ["Policia"] = "LawEnforcement",
+    ["Military"] = "LawEnforcement",
+    ["Ejercito"] = "LawEnforcement",
+    ["Army"] = "LawEnforcement",
+    ["SWAT"] = "LawEnforcement",
+    ["Guard"] = "LawEnforcement",
+
+    -- Ilegales / Delincuentes
+    ["Criminals"] = "Outlaws",
+    ["Criminales"] = "Outlaws",
+    ["Prisoners"] = "Outlaws",
+    ["Presos"] = "Outlaws",
+    ["Inmates"] = "Outlaws",
+    ["Mafia"] = "Outlaws"
+}
+
 local Settings = {
     Enabled = true,
     WallCheck = true,
-    TeamCheck = false, -- Nueva opción de Team Check
+    SmartTeamCheck = true, -- Smart Team Check Inteligente
+    IgnoreForceFields = true, -- Ignora jugadores inmunes (spawn)
     Chams = true,
     Skeleton = true,
     Rainbow = false,
@@ -174,7 +195,7 @@ scroll.Position = UDim2.new(0, 10, 0, 40)
 scroll.BackgroundTransparency = 1
 scroll.ScrollBarThickness = 4
 scroll.ScrollBarImageColor3 = ThemeColor
-scroll.CanvasSize = UDim2.new(0, 0, 0, 430)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 480)
 scroll.Parent = menuFrame
 
 local listLayout = Instance.new("UIListLayout")
@@ -228,7 +249,8 @@ end
 
 CreateToggle("Master Aimbot", true, "Enabled")
 CreateToggle("Wall Check", true, "WallCheck")
-CreateToggle("Team Check", false, "TeamCheck") -- Toggle de Team Check
+CreateToggle("Smart Team Check", true, "SmartTeamCheck")
+CreateToggle("Ignore ForceFields", true, "IgnoreForceFields")
 CreateToggle("Chams (ESP Highlight)", true, "Chams")
 CreateToggle("Bone Skeleton", true, "Skeleton")
 CreateToggle("Rainbow ESP", false, "Rainbow")
@@ -271,15 +293,44 @@ skeletonHolder.Name = "Skeletons"
 skeletonHolder.Parent = gui
 
 -- ==========================================
--- 3. LÓGICA Y HELPERS
+-- 3. LÓGICA DEL SMART TEAM CHECK
 -- ==========================================
 local draggingSlider = false
 
 local function IsTeammate(player)
-    if not Settings.TeamCheck then return false end
-    if player.Team ~= nil and LocalPlayer.Team ~= nil and player.Team == LocalPlayer.Team then
+    if not Settings.SmartTeamCheck then return false end
+    if player == LocalPlayer then return true end
+
+    -- A. Escudo de Protección / Spawn (ForceField)
+    if Settings.IgnoreForceFields and player.Character then
+        if player.Character:FindFirstChildOfClass("ForceField") then
+            return true -- Se considera "intocable" temporalmente
+        end
+    end
+
+    -- B. Mismo Equipo Directo
+    if player.Team ~= nil and LocalPlayer.Team ~= nil then
+        if player.Team == LocalPlayer.Team then
+            return true
+        end
+
+        -- C. Comprobación de Alianzas Faccionales (Ejemplo: Policía + Ejército)
+        local myTeamName = LocalPlayer.Team.Name
+        local targetTeamName = player.Team.Name
+
+        local myAlliance = FactionAlliances[myTeamName]
+        local targetAlliance = FactionAlliances[targetTeamName]
+
+        if myAlliance and targetAlliance and myAlliance == targetAlliance then
+            return true -- Aliados por Facción (No se hacen daño)
+        end
+    end
+
+    -- D. Comprobación por Color de Equipo (TeamColor)
+    if player.TeamColor == LocalPlayer.TeamColor and player.TeamColor ~= BrickColor.new("White") then
         return true
     end
+
     return false
 end
 
@@ -418,16 +469,16 @@ RunService.RenderStepped:Connect(function(dt)
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             local highlight = char:FindFirstChild("HkChams")
             
-            -- Verificar si es un aliado cuando Team Check está encendido
+            -- Evaluación con Smart Team Check
             local isTeam = IsTeammate(player)
             
             if isTeam then
-                -- Si es compañero y Team Check está activo, eliminamos su Highlight y no lo procesamos
+                -- Si es considerado aliado/intocable, quitamos Chams
                 if highlight then highlight:Destroy() end
             elseif head and humanoid and humanoid.Health > 0 then
                 
-                -- Color según Team Check (Rojo Neón si es enemigo con TeamCheck activo, si no Morado/Rainbow)
-                local visualColor = (Settings.TeamCheck and EnemyColor) or currentColor
+                -- Color según estado: Rojo Neón si es enemigo válido
+                local visualColor = (Settings.SmartTeamCheck and EnemyColor) or currentColor
                 
                 -- CHAMS
                 if Settings.Chams then
@@ -460,7 +511,7 @@ RunService.RenderStepped:Connect(function(dt)
                     end
                 end
 
-                -- AIMBOT (Solo detecta si NO es aliado)
+                -- AIMBOT
                 local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
                     local targetPos2D = Vector2.new(screenPoint.X, screenPoint.Y)
@@ -484,7 +535,7 @@ RunService.RenderStepped:Connect(function(dt)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local plr = char and Players:GetPlayerFromCharacter(char)
             
-            -- Liberar si murió, perdió visión o cambió de equipo a aliado
+            -- Liberar si murió, perdió visión o pasó a ser aliado/intocable
             if not (char and hum and hum.Health > 0 and IsVisible(lockedTarget) and not IsTeammate(plr)) then
                 lockedTarget = nil
             end
