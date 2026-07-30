@@ -1,6 +1,6 @@
 --[[
-    HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed & Fully Optimized)
-    Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache
+    HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed, Fully Optimized & Hardened)
+    Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache & Safety
 ]]
 
 local Players = game:GetService("Players")
@@ -26,7 +26,8 @@ local Config = {
         Predict = false, 
         FOV = 150, 
         TriggerBot = false,
-        PredictionMultiplier = 1000
+        PredictionMultiplier = 1000,
+        TriggerDelay = 0.1 -- Delay de seguridad para limitar la frecuencia del TriggerBot
     },
     Visuals = { 
         Chams = false, 
@@ -56,6 +57,7 @@ local TextWhite = Color3.fromRGB(230, 230, 230)
 
 local Connections = {}
 local Unloaded = false
+local LastTriggerTick = 0
 
 -- Caché para revertir cambios del mapa
 local OriginalLighting = {
@@ -107,6 +109,9 @@ local function GetPlayerTeamName(player)
         end
         return nil
     end)
+    if not success then
+        warn("[HkStudio Error] GetPlayerTeamName falló: " .. tostring(res))
+    end
     return success and res or nil
 end
 
@@ -130,23 +135,47 @@ local function IsTeammate(player)
 end
 
 -- ==========================================
--- 2. WALL CHECK REAL CON RAYCAST
+-- 2. WALL CHECK REAL CON RAYCAST Y VALIDACIÓN DE ÁREAS PELIGROSAS
 -- ==========================================
+local function IsSafeDestination(cframe)
+    -- Validación de área peligrosa: Verifica que el destino no esté fuera de límites extremos o vacío peligroso
+    local pos = cframe.Position
+    if math.abs(pos.X) > 100000 or math.abs(pos.Z) > 100000 or pos.Y < -500 then
+        return false
+    end
+    -- Validación adicional de Raycast hacia abajo para verificar piso firme
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    if LocalPlayer.Character then
+        params.FilterDescendantsInstances = {LocalPlayer.Character}
+    end
+    local ray = workspace:Raycast(pos + Vector3.new(0, 5, 0), Vector3.new(0, -50, 0), params)
+    if not ray then
+        return false -- Caída libre o vacío peligroso detectado
+    end
+    return true
+end
+
 local function IsVisible(targetPart, ignoreList)
     if not Config.Aimbot.WallCheck then return true end
+    if not targetPart or not targetPart.Parent then return false end
+    
     local camPos = Camera.CFrame.Position
     local targetPos = targetPart.Position
     local direction = targetPos - camPos
 
     RaycastParamsCache.FilterDescendantsInstances = ignoreList or {LocalPlayer.Character, Camera}
     
-    local result = workspace:Raycast(camPos, direction, RaycastParamsCache)
-    if not result then return true end
+    local success, result = pcall(function()
+        return workspace:Raycast(camPos, direction, RaycastParamsCache)
+    end)
     
-    -- Si el hit es parte del personaje objetivo o un accesorio suyo, se considera visible
+    if not success or not result then return true end
+    
     local hitInstance = result.Instance
     local targetChar = targetPart.Parent
-    if hitInstance:IsDescendantOf(targetChar) then
+    if hitInstance and hitInstance:IsDescendantOf(targetChar) then
         return true
     end
     
@@ -154,7 +183,7 @@ local function IsVisible(targetPart, ignoreList)
 end
 
 -- ==========================================
--- 3. SISTEMA DE UI (DISEÑO EXACTO)
+-- 3. SISTEMA DE UI
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -207,7 +236,7 @@ NotifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NotifyLayout.Padding = UDim.new(0, 10)
 
 local function Notify(title, text)
-    pcall(function()
+    local success, err = pcall(function()
         local notif = Instance.new("Frame", NotifyContainer)
         notif.Size = UDim2.new(1, 0, 0, 60)
         notif.BackgroundColor3 = BgDark
@@ -246,6 +275,9 @@ local function Notify(title, text)
             end)
         end)
     end)
+    if not success then
+        warn("[HkStudio Error] Notify falló: " .. tostring(err))
+    end
 end
 
 -- MENÚ PRINCIPAL
@@ -479,27 +511,29 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
         end
     end)
 
-    -- Cerrar dropdown al hacer clic fuera
+    -- Cerrar dropdown al hacer clic fuera de él de forma segura
     table.insert(Connections, UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
-            local mPos = UserInputService:GetMouseLocation()
-            local absPos = listFrame.AbsolutePosition
-            local absSize = listFrame.AbsoluteSize
-            local btnPos = btn.AbsolutePosition
-            local btnSize = btn.AbsoluteSize
-            
-            local inList = (mPos.X >= absPos.X and mPos.X <= absPos.X + absSize.X and mPos.Y >= absPos.Y and mPos.Y <= absPos.Y + absSize.Y)
-            local inBtn = (mPos.X >= btnPos.X and mPos.X <= btnPos.X + btnSize.X and mPos.Y >= btnPos.Y and mPos.Y <= btnPos.Y + btnSize.Y)
-            
-            if not inList and not inBtn then
-                listFrame.Visible = false
-            end
+            pcall(function()
+                local mPos = UserInputService:GetMouseLocation()
+                local absPos = listFrame.AbsolutePosition
+                local absSize = listFrame.AbsoluteSize
+                local btnPos = btn.AbsolutePosition
+                local btnSize = btn.AbsoluteSize
+                
+                local inList = (mPos.X >= absPos.X and mPos.X <= absPos.X + absSize.X and mPos.Y >= absPos.Y and mPos.Y <= absPos.Y + absSize.Y)
+                local inBtn = (mPos.X >= btnPos.X and mPos.X <= btnPos.X + btnSize.X and mPos.Y >= btnPos.Y and mPos.Y <= btnPos.Y + btnSize.Y)
+                
+                if not inList and not inBtn then
+                    listFrame.Visible = false
+                end
+            end)
         end
     end))
 end
 
 -- ==========================================
--- 3. CONSTRUCCIÓN DE LAS PESTAÑAS
+-- 4. CONSTRUCCIÓN DE LAS PESTAÑAS
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
@@ -607,7 +641,7 @@ CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", function(state)
     end
 end)
 
--- Dropdown Jugadores
+-- Dropdown Jugadores con validación de destino seguro
 CreateDropdown(tabLocal, "Teleport a Jugador", 
     function()
         local list = {}
@@ -619,8 +653,15 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     function(selectedPlayer)
         pcall(function()
             if selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3)
-                Notify("Teleport", "Viajando a " .. selectedPlayer.Name)
+                local targetCFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                if IsSafeDestination(targetCFrame) then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = targetCFrame
+                        Notify("Teleport", "Viajando a " .. selectedPlayer.Name)
+                    end
+                else
+                    Notify("Teleport", "Destino inseguro o fuera de límites bloqueado.")
+                end
             end
         end)
     end
@@ -683,7 +724,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 end))
 
 -- ==========================================
--- 4. BUCLE PRINCIPAL (DRAWING API, AIMBOT, SKELETON, TRIGGERBOT, CHAMS CACHE)
+-- 5. BUCLE PRINCIPAL (OPTIMIZADO Y SEGURO)
 -- ==========================================
 _G.HkFovCircle = Drawing.new("Circle")
 _G.HkFovCircle.Thickness = 1
@@ -699,11 +740,11 @@ local function GetESP(player)
             Name = Drawing.new("Text"), 
             Dist = Drawing.new("Text"),
             Skeleton = {
-                Drawing.new("Line"), -- Head to Torso
-                Drawing.new("Line"), -- Torso to Left Arm
-                Drawing.new("Line"), -- Torso to Right Arm
-                Drawing.new("Line"), -- Torso to Left Leg
-                Drawing.new("Line")  -- Torso to Right Leg
+                Drawing.new("Line"),
+                Drawing.new("Line"),
+                Drawing.new("Line"),
+                Drawing.new("Line"),
+                Drawing.new("Line")
             }
         }
         local esp = _G.HkDrawingCache[player]
@@ -720,12 +761,14 @@ end
 
 local function ClearESP(esp)
     pcall(function()
-        esp.Box.Visible = false
-        esp.Tracer.Visible = false
-        esp.Name.Visible = false
-        esp.Dist.Visible = false
-        for _, line in pairs(esp.Skeleton or {}) do
-            line.Visible = false
+        if esp.Box then esp.Box.Visible = false end
+        if esp.Tracer then esp.Tracer.Visible = false end
+        if esp.Name then esp.Name.Visible = false end
+        if esp.Dist then esp.Dist.Visible = false end
+        if esp.Skeleton then
+            for _, line in pairs(esp.Skeleton) do
+                if line then line.Visible = false end
+            end
         end
     end)
 end
@@ -735,17 +778,19 @@ table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
     if _G.HkDrawingCache[player] then
         pcall(function()
             local esp = _G.HkDrawingCache[player]
-            esp.Box:Remove()
-            esp.Tracer:Remove()
-            esp.Name:Remove()
-            esp.Dist:Remove()
-            for _, line in pairs(esp.Skeleton) do line:Remove() end
+            if esp.Box then esp.Box:Remove() end
+            if esp.Tracer then esp.Tracer:Remove() end
+            if esp.Name then esp.Name:Remove() end
+            if esp.Dist then esp.Dist:Remove() end
+            if esp.Skeleton then
+                for _, line in pairs(esp.Skeleton) do if line then line:Remove() end end
+            end
         end)
         _G.HkDrawingCache[player] = nil
     end
 end))
 
--- Gestión de Chams mediante CharacterAdded / DescendantAdded para evitar sobrecarga en RenderStepped
+-- Gestión de Chams mediante CharacterAdded
 local function SetupChams(player)
     if player == LocalPlayer then return end
     local function applyHighlight(char)
@@ -799,12 +844,12 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         if player ~= LocalPlayer then
             local esp = GetESP(player)
             local char = player.Character
+            -- Validación estricta y almacenamiento de referencias de partes clave para evitar múltiples FindFirstChild dentro del bucle
             local root = char and char:FindFirstChild("HumanoidRootPart")
             local head = char and char:FindFirstChild("Head")
-            local aimPart = char and char:FindFirstChild(Config.Aimbot.TargetPart)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local aimPart = char and char:FindFirstChild(Config.Aimbot.TargetPart)
             
-            -- Sincronizar Chams en tiempo real según configuración
             local chamsObj = char and char:FindFirstChild("HkChams")
             if chamsObj then
                 chamsObj.Enabled = Config.Visuals.Chams
@@ -816,27 +861,35 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                 local physDist = math.floor((Camera.CFrame.Position - root.Position).Magnitude)
 
                 if onScreen then
-                    -- Box ESP
-                    if Config.Visuals.Box then
-                        local headV = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-                        local legV = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
-                        local boxH = math.abs(headV.Y - legV.Y)
-                        esp.Box.Size = Vector2.new(boxH * 0.6, boxH)
-                        esp.Box.Position = Vector2.new(headV.X - (esp.Box.Size.X / 2), headV.Y)
-                        esp.Box.Color = activeColor
-                        esp.Box.Visible = true
-                    else esp.Box.Visible = false end
+                    -- Box ESP seguro
+                    if Config.Visuals.Box and esp.Box then
+                        pcall(function()
+                            local headV = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                            local legV = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+                            local boxH = math.abs(headV.Y - legV.Y)
+                            esp.Box.Size = Vector2.new(boxH * 0.6, boxH)
+                            esp.Box.Position = Vector2.new(headV.X - (esp.Box.Size.X / 2), headV.Y)
+                            esp.Box.Color = activeColor
+                            esp.Box.Visible = true
+                        end)
+                    elseif esp.Box then 
+                        esp.Box.Visible = false 
+                    end
 
-                    -- Tracers
-                    if Config.Visuals.Tracers then
-                        esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                        esp.Tracer.To = Vector2.new(vector.X, vector.Y)
-                        esp.Tracer.Color = activeColor
-                        esp.Tracer.Visible = true
-                    else esp.Tracer.Visible = false end
+                    -- Tracers seguros
+                    if Config.Visuals.Tracers and esp.Tracer then
+                        pcall(function()
+                            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                            esp.Tracer.To = Vector2.new(vector.X, vector.Y)
+                            esp.Tracer.Color = activeColor
+                            esp.Tracer.Visible = true
+                        end)
+                    elseif esp.Tracer then 
+                        esp.Tracer.Visible = false 
+                    end
 
-                    -- Skeleton ESP
-                    if Config.Visuals.Skeleton then
+                    -- Skeleton ESP seguro
+                    if Config.Visuals.Skeleton and esp.Skeleton then
                         pcall(function()
                             local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
                             local leftArm = char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("Left Arm")
@@ -847,14 +900,16 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                             if head and torso then
                                 local hPos, hVis = Camera:WorldToViewportPoint(head.Position)
                                 local tPos, tVis = Camera:WorldToViewportPoint(torso.Position)
-                                if hVis and tVis then
+                                if hVis and tVis and esp.Skeleton[1] then
                                     esp.Skeleton[1].From = Vector2.new(hPos.X, hPos.Y)
                                     esp.Skeleton[1].To = Vector2.new(tPos.X, tPos.Y)
                                     esp.Skeleton[1].Color = activeColor
                                     esp.Skeleton[1].Visible = true
-                                else esp.Skeleton[1].Visible = false end
+                                elseif esp.Skeleton[1] then 
+                                    esp.Skeleton[1].Visible = false 
+                                end
 
-                                if leftArm then
+                                if leftArm and esp.Skeleton[2] then
                                     local laPos, laVis = Camera:WorldToViewportPoint(leftArm.Position)
                                     if tVis and laVis then
                                         esp.Skeleton[2].From = Vector2.new(tPos.X, tPos.Y)
@@ -862,9 +917,11 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                                         esp.Skeleton[2].Color = activeColor
                                         esp.Skeleton[2].Visible = true
                                     else esp.Skeleton[2].Visible = false end
-                                else esp.Skeleton[2].Visible = false end
+                                elseif esp.Skeleton[2] then 
+                                    esp.Skeleton[2].Visible = false 
+                                end
 
-                                if rightArm then
+                                if rightArm and esp.Skeleton[3] then
                                     local raPos, raVis = Camera:WorldToViewportPoint(rightArm.Position)
                                     if tVis and raVis then
                                         esp.Skeleton[3].From = Vector2.new(tPos.X, tPos.Y)
@@ -872,9 +929,11 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                                         esp.Skeleton[3].Color = activeColor
                                         esp.Skeleton[3].Visible = true
                                     else esp.Skeleton[3].Visible = false end
-                                else esp.Skeleton[3].Visible = false end
+                                elseif esp.Skeleton[3] then 
+                                    esp.Skeleton[3].Visible = false 
+                                end
 
-                                if leftLeg then
+                                if leftLeg and esp.Skeleton[4] then
                                     local llPos, llVis = Camera:WorldToViewportPoint(leftLeg.Position)
                                     if tVis and llVis then
                                         esp.Skeleton[4].From = Vector2.new(tPos.X, tPos.Y)
@@ -882,9 +941,11 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                                         esp.Skeleton[4].Color = activeColor
                                         esp.Skeleton[4].Visible = true
                                     else esp.Skeleton[4].Visible = false end
-                                else esp.Skeleton[4].Visible = false end
+                                elseif esp.Skeleton[4] then 
+                                    esp.Skeleton[4].Visible = false 
+                                end
 
-                                if rightLeg then
+                                if rightLeg and esp.Skeleton[5] then
                                     local rlPos, rlVis = Camera:WorldToViewportPoint(rightLeg.Position)
                                     if tVis and rlVis then
                                         esp.Skeleton[5].From = Vector2.new(tPos.X, tPos.Y)
@@ -892,32 +953,39 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                                         esp.Skeleton[5].Color = activeColor
                                         esp.Skeleton[5].Visible = true
                                     else esp.Skeleton[5].Visible = false end
-                                else esp.Skeleton[5].Visible = false end
+                                elseif esp.Skeleton[5] then 
+                                    esp.Skeleton[5].Visible = false 
+                                end
                             else
-                                for _, line in pairs(esp.Skeleton) do line.Visible = false end
+                                for _, line in pairs(esp.Skeleton) do if line then line.Visible = false end end
                             end
                         end)
                     else
-                        for _, line in pairs(esp.Skeleton) do line.Visible = false end
+                        if esp.Skeleton then
+                            for _, line in pairs(esp.Skeleton) do if line then line.Visible = false end end
+                        end
                     end
 
-                    -- Info
-                    if Config.Visuals.Info then
-                        esp.Name.Text = player.Name
-                        esp.Name.Position = Vector2.new(vector.X, vector.Y - (esp.Box.Visible and (esp.Box.Size.Y / 2 + 20) or 20))
-                        esp.Name.Color = TextWhite
-                        esp.Name.Visible = true
-                        
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        esp.Dist.Text = tool and (tool.Name .. " ["..physDist.."m]") or "["..physDist.."m]"
-                        esp.Dist.Position = Vector2.new(vector.X, vector.Y + (esp.Box.Visible and (esp.Box.Size.Y / 2 + 5) or 20))
-                        esp.Dist.Color = tool and EnemyColor or Color3.fromRGB(150,150,150)
-                        esp.Dist.Visible = true
-                    else
-                        esp.Name.Visible = false; esp.Dist.Visible = false
+                    -- Info segura
+                    if Config.Visuals.Info and esp.Name and esp.Dist then
+                        pcall(function()
+                            esp.Name.Text = player.Name
+                            esp.Name.Position = Vector2.new(vector.X, vector.Y - ((esp.Box and esp.Box.Visible) and (esp.Box.Size.Y / 2 + 20) or 20))
+                            esp.Name.Color = TextWhite
+                            esp.Name.Visible = true
+                            
+                            local tool = char:FindFirstChildOfClass("Tool")
+                            esp.Dist.Text = tool and (tool.Name .. " ["..physDist.."m]") or "["..physDist.."m]"
+                            esp.Dist.Position = Vector2.new(vector.X, vector.Y + ((esp.Box and esp.Box.Visible) and (esp.Box.Size.Y / 2 + 5) or 20))
+                            esp.Dist.Color = tool and EnemyColor or Color3.fromRGB(150,150,150)
+                            esp.Dist.Visible = true
+                        end)
+                    elseif esp.Name and esp.Dist then
+                        esp.Name.Visible = false
+                        esp.Dist.Visible = false
                     end
 
-                    -- Aimbot Search (Validando Wall Check solo para candidatos viables dentro del FOV)
+                    -- Aimbot Search: Solo evaluamos Raycast sobre el mejor candidato actual para proteger rendimiento
                     if distFromCenter < shortestDist and aimPart then
                         if IsVisible(aimPart) then
                             shortestDist = distFromCenter
@@ -935,7 +1003,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 
     -- AIMBOT Y TARGET LOCK LOGIC
     if Config.Aimbot.Enabled and isAiming then
-        -- Validar si el objetivo actual sigue siendo válido, visible y dentro del FOV
         if lockedTarget then
             local isValid = false
             pcall(function()
@@ -968,7 +1035,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                     local dist = (lockedTarget.Position - Camera.CFrame.Position).Magnitude
                     local ping = 0
                     pcall(function() ping = LocalPlayer:GetNetworkPing() end)
-                    -- Predicción avanzada considerando velocidad, distancia y ping
                     local leadTime = (dist / Config.Aimbot.PredictionMultiplier) + ping
                     targetPos = targetPos + (vel * leadTime)
                 end
@@ -983,20 +1049,23 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- TRIGGERBOT LOGIC
+    -- TRIGGERBOT LOGIC CON FRECUENCIA LIMITADA (DELAY)
     if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot then
-        pcall(function()
-            local mouseTarget = LocalPlayer:GetMouse().Target
-            if mouseTarget and mouseTarget.Parent then
-                local enemyChar = mouseTarget.Parent
-                local enemyHum = enemyChar:FindFirstChildOfClass("Humanoid")
-                local enemyPlayer = Players:GetPlayerFromCharacter(enemyChar)
-                if enemyHum and enemyHum.Health > 0 and enemyPlayer and enemyPlayer ~= LocalPlayer then
-                    if not IsTeammate(enemyPlayer) then
-                        mouse1click()
+        if tick() - LastTriggerTick >= Config.Aimbot.TriggerDelay then
+            pcall(function()
+                local mouseTarget = LocalPlayer:GetMouse().Target
+                if mouseTarget and mouseTarget.Parent then
+                    local enemyChar = mouseTarget.Parent
+                    local enemyHum = enemyChar:FindFirstChildOfClass("Humanoid")
+                    local enemyPlayer = Players:GetPlayerFromCharacter(enemyChar)
+                    if enemyHum and enemyHum.Health > 0 and enemyPlayer and enemyPlayer ~= LocalPlayer then
+                        if not IsTeammate(enemyPlayer) then
+                            mouse1click()
+                            LastTriggerTick = tick()
+                        end
                     end
                 end
-            end
-        end)
+            end)
+        end
     end
 end))
