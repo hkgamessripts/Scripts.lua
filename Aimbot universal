@@ -1,6 +1,6 @@
 --[[
     HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed, Fully Optimized & Hardened)
-    Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache & Safety
+    Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache & Safety + Config System & Anti-AFK
 ]]
 
 local Players = game:GetService("Players")
@@ -9,6 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -27,7 +28,7 @@ local Config = {
         FOV = 150, 
         TriggerBot = false,
         PredictionMultiplier = 1000,
-        TriggerDelay = 0.1 -- Delay de seguridad para limitar la frecuencia del TriggerBot
+        TriggerDelay = 0.1
     },
     Visuals = { 
         Chams = false, 
@@ -45,7 +46,8 @@ local Config = {
         FakeHeadless = false 
     },
     Settings = { 
-        Keybind = Enum.KeyCode.RightShift 
+        Keybind = Enum.KeyCode.RightShift,
+        AntiAFK = false
     }
 }
 
@@ -138,12 +140,10 @@ end
 -- 2. WALL CHECK REAL CON RAYCAST Y VALIDACIÓN DE ÁREAS PELIGROSAS
 -- ==========================================
 local function IsSafeDestination(cframe)
-    -- Validación de área peligrosa: Verifica que el destino no esté fuera de límites extremos o vacío peligroso
     local pos = cframe.Position
     if math.abs(pos.X) > 100000 or math.abs(pos.Z) > 100000 or pos.Y < -500 then
         return false
     end
-    -- Validación adicional de Raycast hacia abajo para verificar piso firme
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.IgnoreWater = true
@@ -152,7 +152,7 @@ local function IsSafeDestination(cframe)
     end
     local ray = workspace:Raycast(pos + Vector3.new(0, 5, 0), Vector3.new(0, -50, 0), params)
     if not ray then
-        return false -- Caída libre o vacío peligroso detectado
+        return false
     end
     return true
 end
@@ -183,7 +183,7 @@ local function IsVisible(targetPart, ignoreList)
 end
 
 -- ==========================================
--- 3. SISTEMA DE UI
+-- 3. SISTEMA DE UI Y NOTIFICACIONES
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -225,7 +225,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     end
 end))
 
--- NOTIFICACIONES
+-- NOTIFICACIONES FLOTANTES AL LADO
 local NotifyContainer = Instance.new("Frame", hkGui)
 NotifyContainer.Size = UDim2.new(0, 250, 1, -20)
 NotifyContainer.Position = UDim2.new(1, -260, 0, 10)
@@ -366,7 +366,7 @@ local function CreateTab(icon, name)
     return scroll
 end
 
--- FÁBRICA DE UI COMPONENTS
+-- FÁBRICA DE UI COMPONENTS CON NOTIFICACIÓN AUTOMÁTICA
 local function CreateToggle(parent, text, configCat, configKey, customCallback)
     local base = Instance.new("Frame", parent)
     base.BackgroundColor3 = BgLight
@@ -400,6 +400,10 @@ local function CreateToggle(parent, text, configCat, configKey, customCallback)
         local state = Config[configCat][configKey]
         btn.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(50,50,55)
         TweenService:Create(knob, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
+        
+        Notify("HkStudio", text .. (state and " activado" --> ‘Aimbot activado’, etc.
+        ))
+
         if customCallback then customCallback(state) end
     end)
 end
@@ -511,7 +515,6 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
         end
     end)
 
-    -- Cerrar dropdown al hacer clic fuera de él de forma segura
     table.insert(Connections, UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
             pcall(function()
@@ -667,7 +670,90 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     end
 )
 
--- Settings
+-- ==========================================
+-- 5. CONFIGURACIÓN DEL APARTADO SETTINGS (Keybind, Anti-AFK, Save/Load)
+-- ==========================================
+local ConfigFileName = "HkStudio_Config.json"
+
+local function SaveConfiguration()
+    pcall(function()
+        if writefile then
+            local saveData = {
+                Aimbot = Config.Aimbot,
+                Visuals = Config.Visuals,
+                Local = Config.Local,
+                Settings = {
+                    Keybind = Config.Settings.Keybind.Name,
+                    AntiAFK = Config.Settings.AntiAFK
+                }
+            }
+            writefile(ConfigFileName, HttpService:JSONEncode(saveData))
+            Notify("Configuración", "SaveConfig: Configuración guardada.")
+        else
+            Notify("Error", "Tu exploit no soporta writefile.")
+        end
+    end)
+end
+
+local function LoadConfiguration()
+    pcall(function()
+        if readfile and isfile and isfile(ConfigFileName) then
+            local decoded = HttpService:JSONDecode(readfile(ConfigFileName))
+            if decoded then
+                if decoded.Aimbot then for k,v in pairs(decoded.Aimbot) do Config.Aimbot[k] = v end end
+                if decoded.Visuals then for k,v in pairs(decoded.Visuals) do Config.Visuals[k] = v end end
+                if decoded.Local then for k,v in pairs(decoded.Local) do Config.Local[k] = v end end
+                if decoded.Settings then
+                    if decoded.Settings.Keybind and Enum.KeyCode[decoded.Settings.Keybind] then
+                        Config.Settings.Keybind = Enum.KeyCode[decoded.Settings.Keybind]
+                    end
+                    if decoded.Settings.AntiAFK ~= nil then
+                        Config.Settings.AntiAFK = decoded.Settings.AntiAFK
+                    end
+                end
+                Notify("Configuración", "LoadConfig: Configuración cargada.")
+            end
+        else
+            Notify("Configuración", "No se encontró archivo de configuración guardado.")
+        end
+    end)
+end
+
+-- Botón para configurar Keybind de forma interactiva
+local keybindBtn = CreateButton(tabSettings, "Keybind: " .. Config.Settings.Keybind.Name, function() end)
+keybindBtn.MouseButton1Click:Connect(function()
+    keybindBtn.Text = "Pulsa cualquier tecla..."
+    local conn
+    conn = UserInputService.InputBegan:Connect(function(input, gpe)
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            Config.Settings.Keybind = input.KeyCode
+            keybindBtn.Text = "Keybind: " .. input.KeyCode.Name
+            Notify("Settings", "Keybind actualizado a: " .. input.KeyCode.Name)
+            conn:Disconnect()
+        end
+    end)
+end)
+
+-- Anti AFK Toggle dentro de Settings
+CreateToggle(tabSettings, "Anti AFK", "Settings", "AntiAFK")
+
+-- Anti AFK Conexión de seguridad
+table.insert(Connections, LocalPlayer.Idled:Connect(function()
+    if Config.Settings.AntiAFK then
+        local vu = game:GetService("VirtualUser")
+        pcall(function()
+            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        end)
+    end
+end))
+
+-- SaveConfig y LoadConfig Botones dentro de Settings
+CreateButton(tabSettings, "SaveConfig", SaveConfiguration)
+CreateButton(tabSettings, "LoadConfig", LoadConfiguration)
+
+-- Botón Panic / Desvincular dentro de Settings
 CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
     Unloaded = true
     for _, con in pairs(Connections) do
@@ -717,14 +803,17 @@ table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
 end))
 table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end))
 
--- Keybind Menu
+-- Keybind Menu Listener Global
 table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.KeyCode == Config.Settings.Keybind then mainFrame.Visible = not mainFrame.Visible end
+    if input.KeyCode == Config.Settings.Keybind then 
+        mainFrame.Visible = not mainFrame.Visible 
+        Notify("HkStudio", mainFrame.Visible and "UI Abierta" or "UI Cerrada")
+    end
 end))
 
 -- ==========================================
--- 5. BUCLE PRINCIPAL (OPTIMIZADO Y SEGURO)
+-- 6. BUCLE PRINCIPAL (OPTIMIZADO Y SEGURO)
 -- ==========================================
 _G.HkFovCircle = Drawing.new("Circle")
 _G.HkFovCircle.Thickness = 1
@@ -773,7 +862,6 @@ local function ClearESP(esp)
     end)
 end
 
--- Limpieza de caché al salir jugadores
 table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
     if _G.HkDrawingCache[player] then
         pcall(function()
@@ -790,7 +878,6 @@ table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
     end
 end))
 
--- Gestión de Chams mediante CharacterAdded
 local function SetupChams(player)
     if player == LocalPlayer then return end
     local function applyHighlight(char)
@@ -844,7 +931,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         if player ~= LocalPlayer then
             local esp = GetESP(player)
             local char = player.Character
-            -- Validación estricta y almacenamiento de referencias de partes clave para evitar múltiples FindFirstChild dentro del bucle
             local root = char and char:FindFirstChild("HumanoidRootPart")
             local head = char and char:FindFirstChild("Head")
             local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -861,7 +947,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                 local physDist = math.floor((Camera.CFrame.Position - root.Position).Magnitude)
 
                 if onScreen then
-                    -- Box ESP seguro
                     if Config.Visuals.Box and esp.Box then
                         pcall(function()
                             local headV = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
@@ -876,7 +961,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Box.Visible = false 
                     end
 
-                    -- Tracers seguros
                     if Config.Visuals.Tracers and esp.Tracer then
                         pcall(function()
                             esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
@@ -888,7 +972,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Tracer.Visible = false 
                     end
 
-                    -- Skeleton ESP seguro
                     if Config.Visuals.Skeleton and esp.Skeleton then
                         pcall(function()
                             local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
@@ -966,7 +1049,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         end
                     end
 
-                    -- Info segura
                     if Config.Visuals.Info and esp.Name and esp.Dist then
                         pcall(function()
                             esp.Name.Text = player.Name
@@ -985,7 +1067,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Dist.Visible = false
                     end
 
-                    -- Aimbot Search: Solo evaluamos Raycast sobre el mejor candidato actual para proteger rendimiento
                     if distFromCenter < shortestDist and aimPart then
                         if IsVisible(aimPart) then
                             shortestDist = distFromCenter
@@ -1001,7 +1082,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- AIMBOT Y TARGET LOCK LOGIC
     if Config.Aimbot.Enabled and isAiming then
         if lockedTarget then
             local isValid = false
@@ -1049,7 +1129,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- TRIGGERBOT LOGIC CON FRECUENCIA LIMITADA (DELAY)
     if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot then
         if tick() - LastTriggerTick >= Config.Aimbot.TriggerDelay then
             pcall(function()
