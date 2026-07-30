@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed)
+    HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed & Fully Optimized)
     Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache
 ]]
 
@@ -12,16 +12,40 @@ local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
 -- ==========================================
 -- 0. CONFIGURACIÓN Y CACHÉ
 -- ==========================================
 local Config = {
-    Aimbot = { Enabled = false, WallCheck = true, TeamCheck = true, TargetPart = "Head", Smoothness = 1, Predict = false, FOV = 150, TriggerBot = false },
-    Visuals = { Chams = false, Skeleton = false, Box = false, Tracers = false, Info = false, Rainbow = false },
-    Local = { Fullbright = false, Noclip = false, BoostFPS = false, FakeKorblox = false, FakeHeadless = false },
-    Settings = { Keybind = Enum.KeyCode.RightShift }
+    Aimbot = { 
+        Enabled = false, 
+        WallCheck = true, 
+        TeamCheck = true, 
+        TargetPart = "Head", 
+        Smoothness = 1, 
+        Predict = false, 
+        FOV = 150, 
+        TriggerBot = false,
+        PredictionMultiplier = 1000
+    },
+    Visuals = { 
+        Chams = false, 
+        Skeleton = false, 
+        Box = false, 
+        Tracers = false, 
+        Info = false, 
+        Rainbow = false 
+    },
+    Local = { 
+        Fullbright = false, 
+        Noclip = false, 
+        BoostFPS = false, 
+        FakeKorblox = false, 
+        FakeHeadless = false 
+    },
+    Settings = { 
+        Keybind = Enum.KeyCode.RightShift 
+    }
 }
 
 local ThemeColor = Color3.fromRGB(120, 80, 255)
@@ -41,7 +65,14 @@ local OriginalLighting = {
     FogEnd = Lighting.FogEnd
 }
 local OriginalMaterials = {}
+local OriginalDecalTransparencies = {}
+local OriginalTextureTransparencies = {}
 local OriginalTransparencies = {}
+
+-- RaycastParams para Wall Check optimizado
+local RaycastParamsCache = RaycastParams.new()
+RaycastParamsCache.FilterType = Enum.RaycastFilterType.Exclude
+RaycastParamsCache.IgnoreWater = true
 
 -- ==========================================
 -- 1. MOTOR DE DETECCIÓN INTELIGENTE (Roleplay Fix)
@@ -60,20 +91,23 @@ local function GetFactionGroup(teamName)
 end
 
 local function GetPlayerTeamName(player)
-    if player.Team then return player.Team.Name end
-    local attrs = {"Team", "Faction", "Role", "Job", "Trabajo", "Equipo", "Rol"}
-    for _, attr in ipairs(attrs) do
-        local val = player:GetAttribute(attr) or (player.Character and player.Character:GetAttribute(attr))
-        if val then return tostring(val) end
-    end
-    local ls = player:FindFirstChild("leaderstats")
-    if ls then
+    local success, res = pcall(function()
+        if player.Team then return player.Team.Name end
+        local attrs = {"Team", "Faction", "Role", "Job", "Trabajo", "Equipo", "Rol"}
         for _, attr in ipairs(attrs) do
-            local val = ls:FindFirstChild(attr) or player:FindFirstChild(attr)
-            if val and val:IsA("ValueBase") then return tostring(val.Value) end
+            local val = player:GetAttribute(attr) or (player.Character and player.Character:GetAttribute(attr))
+            if val then return tostring(val) end
         end
-    end
-    return nil
+        local ls = player:FindFirstChild("leaderstats")
+        if ls then
+            for _, attr in ipairs(attrs) do
+                local val = ls:FindFirstChild(attr) or player:FindFirstChild(attr)
+                if val and val:IsA("ValueBase") then return tostring(val.Value) end
+            end
+        end
+        return nil
+    end)
+    return success and res or nil
 end
 
 local function IsTeammate(player)
@@ -89,12 +123,38 @@ local function IsTeammate(player)
         end
         return false
     end
-    if LocalPlayer.Team ~= nil and player.Team ~= nil and LocalPlayer.TeamColor == player.TeamColor then return true end
+    local success, res = pcall(function()
+        return LocalPlayer.Team ~= nil and player.Team ~= nil and LocalPlayer.TeamColor == player.TeamColor
+    end)
+    return success and res or false
+end
+
+-- ==========================================
+-- 2. WALL CHECK REAL CON RAYCAST
+-- ==========================================
+local function IsVisible(targetPart, ignoreList)
+    if not Config.Aimbot.WallCheck then return true end
+    local camPos = Camera.CFrame.Position
+    local targetPos = targetPart.Position
+    local direction = targetPos - camPos
+
+    RaycastParamsCache.FilterDescendantsInstances = ignoreList or {LocalPlayer.Character, Camera}
+    
+    local result = workspace:Raycast(camPos, direction, RaycastParamsCache)
+    if not result then return true end
+    
+    -- Si el hit es parte del personaje objetivo o un accesorio suyo, se considera visible
+    local hitInstance = result.Instance
+    local targetChar = targetPart.Parent
+    if hitInstance:IsDescendantOf(targetChar) then
+        return true
+    end
+    
     return false
 end
 
 -- ==========================================
--- 2. SISTEMA DE UI (DISEÑO EXACTO)
+-- 3. SISTEMA DE UI (DISEÑO EXACTO)
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -147,40 +207,44 @@ NotifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 NotifyLayout.Padding = UDim.new(0, 10)
 
 local function Notify(title, text)
-    local notif = Instance.new("Frame", NotifyContainer)
-    notif.Size = UDim2.new(1, 0, 0, 60)
-    notif.BackgroundColor3 = BgDark
-    notif.Position = UDim2.new(1, 300, 0, 0)
-    Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 6)
-    local stroke = Instance.new("UIStroke", notif)
-    stroke.Color = ThemeColor
-    stroke.Thickness = 1
-    
-    local titleLbl = Instance.new("TextLabel", notif)
-    titleLbl.Size = UDim2.new(1, -20, 0, 20)
-    titleLbl.Position = UDim2.new(0, 10, 0, 5)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.TextColor3 = ThemeColor
-    titleLbl.Font = Enum.Font.GothamBold
-    titleLbl.Text = title
-    
-    local textLbl = Instance.new("TextLabel", notif)
-    textLbl.Size = UDim2.new(1, -20, 0, 30)
-    textLbl.Position = UDim2.new(0, 10, 0, 25)
-    textLbl.BackgroundTransparency = 1
-    textLbl.TextXAlignment = Enum.TextXAlignment.Left
-    textLbl.TextColor3 = TextWhite
-    textLbl.Font = Enum.Font.Gotham
-    textLbl.TextSize = 12
-    textLbl.Text = text
+    pcall(function()
+        local notif = Instance.new("Frame", NotifyContainer)
+        notif.Size = UDim2.new(1, 0, 0, 60)
+        notif.BackgroundColor3 = BgDark
+        notif.Position = UDim2.new(1, 300, 0, 0)
+        Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 6)
+        local stroke = Instance.new("UIStroke", notif)
+        stroke.Color = ThemeColor
+        stroke.Thickness = 1
+        
+        local titleLbl = Instance.new("TextLabel", notif)
+        titleLbl.Size = UDim2.new(1, -20, 0, 20)
+        titleLbl.Position = UDim2.new(0, 10, 0, 5)
+        titleLbl.BackgroundTransparency = 1
+        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+        titleLbl.TextColor3 = ThemeColor
+        titleLbl.Font = Enum.Font.GothamBold
+        titleLbl.Text = title
+        
+        local textLbl = Instance.new("TextLabel", notif)
+        textLbl.Size = UDim2.new(1, -20, 0, 30)
+        textLbl.Position = UDim2.new(0, 10, 0, 25)
+        textLbl.BackgroundTransparency = 1
+        textLbl.TextXAlignment = Enum.TextXAlignment.Left
+        textLbl.TextColor3 = TextWhite
+        textLbl.Font = Enum.Font.Gotham
+        textLbl.TextSize = 12
+        textLbl.Text = text
 
-    TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
-    task.delay(3, function()
-        local exitTween = TweenService:Create(notif, TweenInfo.new(0.3), {Position = UDim2.new(1, 300, 0, 0)})
-        exitTween:Play()
-        exitTween.Completed:Wait()
-        notif:Destroy()
+        TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+        task.delay(3, function()
+            pcall(function()
+                local exitTween = TweenService:Create(notif, TweenInfo.new(0.3), {Position = UDim2.new(1, 300, 0, 0)})
+                exitTween:Play()
+                exitTween.Completed:Wait()
+                notif:Destroy()
+            end)
+        end)
     end)
 end
 
@@ -348,9 +412,9 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
 
     local dragging = false
     track.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end))
     
-    UserInputService.InputChanged:Connect(function(input)
+    table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local mx = UserInputService:GetMouseLocation().X
             local rel = math.clamp(mx - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
@@ -360,7 +424,7 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
             Config[configCat][configKey] = value
             valLbl.Text = tostring(value)
         end
-    end)
+    end))
 end
 
 local function CreateButton(parent, text, callback)
@@ -414,6 +478,24 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
             end
         end
     end)
+
+    -- Cerrar dropdown al hacer clic fuera
+    table.insert(Connections, UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and listFrame.Visible then
+            local mPos = UserInputService:GetMouseLocation()
+            local absPos = listFrame.AbsolutePosition
+            local absSize = listFrame.AbsoluteSize
+            local btnPos = btn.AbsolutePosition
+            local btnSize = btn.AbsoluteSize
+            
+            local inList = (mPos.X >= absPos.X and mPos.X <= absPos.X + absSize.X and mPos.Y >= absPos.Y and mPos.Y <= absPos.Y + absSize.Y)
+            local inBtn = (mPos.X >= btnPos.X and mPos.X <= btnPos.X + btnSize.X and mPos.Y >= btnPos.Y and mPos.Y <= btnPos.Y + btnSize.Y)
+            
+            if not inList and not inBtn then
+                listFrame.Visible = false
+            end
+        end
+    end))
 end
 
 -- ==========================================
@@ -461,18 +543,28 @@ end)
 CreateToggle(tabLocal, "Boost FPS (Limpiar Mapa)", "Local", "BoostFPS", function(state)
     if state then
         for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("BasePart") then
-                OriginalMaterials[v] = v.Material
-                v.Material = Enum.Material.SmoothPlastic
-            end
-            if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 1 end
+            pcall(function()
+                if v:IsA("BasePart") then
+                    OriginalMaterials[v] = v.Material
+                    v.Material = Enum.Material.SmoothPlastic
+                elseif v:IsA("Decal") then
+                    OriginalDecalTransparencies[v] = v.Transparency
+                    v.Transparency = 1
+                elseif v:IsA("Texture") then
+                    OriginalTextureTransparencies[v] = v.Transparency
+                    v.Transparency = 1
+                end
+            end)
         end
     else
         for part, mat in pairs(OriginalMaterials) do
-            if part and part.Parent then part.Material = mat end
+            pcall(function() if part and part.Parent then part.Material = mat end end)
         end
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("Decal") or v:IsA("Texture") then v.Transparency = 0 end
+        for decal, trans in pairs(OriginalDecalTransparencies) do
+            pcall(function() if decal and decal.Parent then decal.Transparency = trans end end)
+        end
+        for tex, trans in pairs(OriginalTextureTransparencies) do
+            pcall(function() if tex and tex.Parent then tex.Transparency = trans end end)
         end
     end
 end)
@@ -505,10 +597,12 @@ CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", function(state)
         if state then
             OriginalTransparencies["Head"] = head.Transparency
             head.Transparency = 1
-            if head:FindFirstChild("face") then head.face.Transparency = 1 end
+            local face = head:FindFirstChild("face")
+            if face then face.Transparency = 1 end
         else
             head.Transparency = OriginalTransparencies["Head"] or 0
-            if head:FindFirstChild("face") then head.face.Transparency = 0 end
+            local face = head:FindFirstChild("face")
+            if face then face.Transparency = 0 end
         end
     end
 end)
@@ -523,28 +617,40 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
         return list
     end, 
     function(selectedPlayer)
-        if selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character.HumanoidRootPart.CFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3)
-            Notify("Teleport", "Viajando a " .. selectedPlayer.Name)
-        end
+        pcall(function()
+            if selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3)
+                Notify("Teleport", "Viajando a " .. selectedPlayer.Name)
+            end
+        end)
     end
 )
 
 -- Settings
 CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
     Unloaded = true
-    for _, con in pairs(Connections) do con:Disconnect() end
-    hkGui:Destroy()
+    for _, con in pairs(Connections) do
+        pcall(function() con:Disconnect() end)
+    end
+    pcall(function() hkGui:Destroy() end)
     
     for _, p in pairs(Players:GetPlayers()) do
-        if p.Character and p.Character:FindFirstChild("HkChams") then p.Character.HkChams:Destroy() end
+        pcall(function()
+            if p.Character then
+                local chams = p.Character:FindFirstChild("HkChams")
+                if chams then chams:Destroy() end
+            end
+        end)
     end
-    if _G.HkFovCircle then _G.HkFovCircle:Remove() end
+    pcall(function() if _G.HkFovCircle then _G.HkFovCircle:Remove() end end)
     for _, esp in pairs(_G.HkDrawingCache or {}) do
-        if esp.Box then pcall(function() esp.Box:Remove() end) end
-        if esp.Tracer then pcall(function() esp.Tracer:Remove() end) end
-        if esp.Name then pcall(function() esp.Name:Remove() end) end
-        if esp.Dist then pcall(function() esp.Dist:Remove() end) end
+        pcall(function()
+            if esp.Box then esp.Box:Remove() end
+            if esp.Tracer then esp.Tracer:Remove() end
+            if esp.Name then esp.Name:Remove() end
+            if esp.Dist then esp.Dist:Remove() end
+            for _, line in pairs(esp.Skeleton or {}) do line:Remove() end
+        end)
     end
     print("[HkStudio] Borrado limpio completado.")
 end)
@@ -557,18 +663,18 @@ activeTab = Tabs["Aimbot"]
 
 -- Drag
 local dragToggle, dragStart, startPos
-mainFrame.InputBegan:Connect(function(input)
+table.insert(Connections, mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragToggle = true; dragStart = input.Position; startPos = mainFrame.Position
     end
-end)
-UserInputService.InputChanged:Connect(function(input)
+end))
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
     if dragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
-end)
-UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end)
+end))
+table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end))
 
 -- Keybind Menu
 table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gpe)
@@ -577,7 +683,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 end))
 
 -- ==========================================
--- 4. BUCLE PRINCIPAL (DRAWING API & AIMBOT)
+-- 4. BUCLE PRINCIPAL (DRAWING API, AIMBOT, SKELETON, TRIGGERBOT, CHAMS CACHE)
 -- ==========================================
 _G.HkFovCircle = Drawing.new("Circle")
 _G.HkFovCircle.Thickness = 1
@@ -588,32 +694,97 @@ _G.HkDrawingCache = {}
 local function GetESP(player)
     if not _G.HkDrawingCache[player] then
         _G.HkDrawingCache[player] = {
-            Box = Drawing.new("Square"), Tracer = Drawing.new("Line"),
-            Name = Drawing.new("Text"), Dist = Drawing.new("Text")
+            Box = Drawing.new("Square"), 
+            Tracer = Drawing.new("Line"),
+            Name = Drawing.new("Text"), 
+            Dist = Drawing.new("Text"),
+            Skeleton = {
+                Drawing.new("Line"), -- Head to Torso
+                Drawing.new("Line"), -- Torso to Left Arm
+                Drawing.new("Line"), -- Torso to Right Arm
+                Drawing.new("Line"), -- Torso to Left Leg
+                Drawing.new("Line")  -- Torso to Right Leg
+            }
         }
         local esp = _G.HkDrawingCache[player]
         esp.Box.Thickness = 1; esp.Box.Filled = false
         esp.Tracer.Thickness = 1
         esp.Name.Size = 14; esp.Name.Center = true; esp.Name.Outline = true
         esp.Dist.Size = 12; esp.Dist.Center = true; esp.Dist.Outline = true
+        for _, line in pairs(esp.Skeleton) do
+            line.Thickness = 1
+        end
     end
     return _G.HkDrawingCache[player]
 end
 
 local function ClearESP(esp)
-    esp.Box.Visible = false; esp.Tracer.Visible = false
-    esp.Name.Visible = false; esp.Dist.Visible = false
+    pcall(function()
+        esp.Box.Visible = false
+        esp.Tracer.Visible = false
+        esp.Name.Visible = false
+        esp.Dist.Visible = false
+        for _, line in pairs(esp.Skeleton or {}) do
+            line.Visible = false
+        end
+    end)
 end
+
+-- Limpieza de caché al salir jugadores
+table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
+    if _G.HkDrawingCache[player] then
+        pcall(function()
+            local esp = _G.HkDrawingCache[player]
+            esp.Box:Remove()
+            esp.Tracer:Remove()
+            esp.Name:Remove()
+            esp.Dist:Remove()
+            for _, line in pairs(esp.Skeleton) do line:Remove() end
+        end)
+        _G.HkDrawingCache[player] = nil
+    end
+end))
+
+-- Gestión de Chams mediante CharacterAdded / DescendantAdded para evitar sobrecarga en RenderStepped
+local function SetupChams(player)
+    if player == LocalPlayer then return end
+    local function applyHighlight(char)
+        if not char then return end
+        local hl = char:FindFirstChild("HkChams")
+        if not hl then
+            hl = Instance.new("Highlight")
+            hl.Name = "HkChams"
+            hl.Parent = char
+        end
+        hl.FillColor = EnemyColor
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Enabled = Config.Visuals.Chams
+    end
+
+    table.insert(Connections, player.CharacterAdded:Connect(function(char)
+        applyHighlight(char)
+    end))
+    if player.Character then
+        applyHighlight(player.Character)
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    SetupChams(p)
+end
+table.insert(Connections, Players.PlayerAdded:Connect(function(p)
+    SetupChams(p)
+end))
 
 local isAiming = false
 local lockedTarget = nil
-table.insert(Connections, UserInputService.InputBegan:Connect(function(i, g) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
+table.insert(Connections, UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
 table.insert(Connections, UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false; lockedTarget = nil end end))
 
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if Unloaded then return end
 
-    local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(tick() % 3 / 3, 0.8, 1) or ThemeColor
+    local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(time() % 3 / 3, 0.8, 1) or ThemeColor
     mainStroke.Color = activeColor
     
     local mousePos = UserInputService:GetMouseLocation()
@@ -633,16 +804,16 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
             local aimPart = char and char:FindFirstChild(Config.Aimbot.TargetPart)
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             
-            if char and root and hum and hum.Health > 0 and not IsTeammate(player) then
+            -- Sincronizar Chams en tiempo real según configuración
+            local chamsObj = char and char:FindFirstChild("HkChams")
+            if chamsObj then
+                chamsObj.Enabled = Config.Visuals.Chams
+            end
+
+            if char and root and head and aimPart and hum and hum.Health > 0 and not IsTeammate(player) then
                 local vector, onScreen = Camera:WorldToViewportPoint(root.Position)
                 local distFromCenter = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
                 local physDist = math.floor((Camera.CFrame.Position - root.Position).Magnitude)
-
-                -- Chams
-                if Config.Visuals.Chams then
-                    local hl = char:FindFirstChild("HkChams") or Instance.new("Highlight", char)
-                    hl.Name = "HkChams"; hl.FillColor = EnemyColor; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                elseif char:FindFirstChild("HkChams") then char.HkChams:Destroy() end
 
                 if onScreen then
                     -- Box ESP
@@ -664,6 +835,72 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Tracer.Visible = true
                     else esp.Tracer.Visible = false end
 
+                    -- Skeleton ESP
+                    if Config.Visuals.Skeleton then
+                        pcall(function()
+                            local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+                            local leftArm = char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("Left Arm")
+                            local rightArm = char:FindFirstChild("RightUpperArm") or char:FindFirstChild("Right Arm")
+                            local leftLeg = char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("Left Leg")
+                            local rightLeg = char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("Right Leg")
+
+                            if head and torso then
+                                local hPos, hVis = Camera:WorldToViewportPoint(head.Position)
+                                local tPos, tVis = Camera:WorldToViewportPoint(torso.Position)
+                                if hVis and tVis then
+                                    esp.Skeleton[1].From = Vector2.new(hPos.X, hPos.Y)
+                                    esp.Skeleton[1].To = Vector2.new(tPos.X, tPos.Y)
+                                    esp.Skeleton[1].Color = activeColor
+                                    esp.Skeleton[1].Visible = true
+                                else esp.Skeleton[1].Visible = false end
+
+                                if leftArm then
+                                    local laPos, laVis = Camera:WorldToViewportPoint(leftArm.Position)
+                                    if tVis and laVis then
+                                        esp.Skeleton[2].From = Vector2.new(tPos.X, tPos.Y)
+                                        esp.Skeleton[2].To = Vector2.new(laPos.X, laPos.Y)
+                                        esp.Skeleton[2].Color = activeColor
+                                        esp.Skeleton[2].Visible = true
+                                    else esp.Skeleton[2].Visible = false end
+                                else esp.Skeleton[2].Visible = false end
+
+                                if rightArm then
+                                    local raPos, raVis = Camera:WorldToViewportPoint(rightArm.Position)
+                                    if tVis and raVis then
+                                        esp.Skeleton[3].From = Vector2.new(tPos.X, tPos.Y)
+                                        esp.Skeleton[3].To = Vector2.new(raPos.X, raPos.Y)
+                                        esp.Skeleton[3].Color = activeColor
+                                        esp.Skeleton[3].Visible = true
+                                    else esp.Skeleton[3].Visible = false end
+                                else esp.Skeleton[3].Visible = false end
+
+                                if leftLeg then
+                                    local llPos, llVis = Camera:WorldToViewportPoint(leftLeg.Position)
+                                    if tVis and llVis then
+                                        esp.Skeleton[4].From = Vector2.new(tPos.X, tPos.Y)
+                                        esp.Skeleton[4].To = Vector2.new(llPos.X, llPos.Y)
+                                        esp.Skeleton[4].Color = activeColor
+                                        esp.Skeleton[4].Visible = true
+                                    else esp.Skeleton[4].Visible = false end
+                                else esp.Skeleton[4].Visible = false end
+
+                                if rightLeg then
+                                    local rlPos, rlVis = Camera:WorldToViewportPoint(rightLeg.Position)
+                                    if tVis and rlVis then
+                                        esp.Skeleton[5].From = Vector2.new(tPos.X, tPos.Y)
+                                        esp.Skeleton[5].To = Vector2.new(rlPos.X, rlPos.Y)
+                                        esp.Skeleton[5].Color = activeColor
+                                        esp.Skeleton[5].Visible = true
+                                    else esp.Skeleton[5].Visible = false end
+                                else esp.Skeleton[5].Visible = false end
+                            else
+                                for _, line in pairs(esp.Skeleton) do line.Visible = false end
+                            end
+                        end)
+                    else
+                        for _, line in pairs(esp.Skeleton) do line.Visible = false end
+                    end
+
                     -- Info
                     if Config.Visuals.Info then
                         esp.Name.Text = player.Name
@@ -680,38 +917,86 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Name.Visible = false; esp.Dist.Visible = false
                     end
 
-                    -- Aimbot Search
+                    -- Aimbot Search (Validando Wall Check solo para candidatos viables dentro del FOV)
                     if distFromCenter < shortestDist and aimPart then
-                        shortestDist = distFromCenter
-                        bestTarget = aimPart
+                        if IsVisible(aimPart) then
+                            shortestDist = distFromCenter
+                            bestTarget = aimPart
+                        end
                     end
                 else
                     ClearESP(esp)
                 end
             else
                 ClearESP(esp)
-                if char and char:FindFirstChild("HkChams") then char.HkChams:Destroy() end
             end
         end
     end
 
-    -- AIMBOT LOGIC
+    -- AIMBOT Y TARGET LOCK LOGIC
     if Config.Aimbot.Enabled and isAiming then
-        if not lockedTarget then lockedTarget = bestTarget end
-        if lockedTarget and lockedTarget.Parent then
-            local targetPos = lockedTarget.Position
-            if Config.Aimbot.Predict and lockedTarget.Parent:FindFirstChild("HumanoidRootPart") then
-                local vel = lockedTarget.Parent.HumanoidRootPart.AssemblyLinearVelocity
-                local dist = (lockedTarget.Position - Camera.CFrame.Position).Magnitude
-                targetPos = targetPos + (vel * (dist / 1000))
-            end
-            
-            local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-            if Config.Aimbot.Smoothness > 1 then
-                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 / Config.Aimbot.Smoothness)
-            else
-                Camera.CFrame = targetCFrame
+        -- Validar si el objetivo actual sigue siendo válido, visible y dentro del FOV
+        if lockedTarget then
+            local isValid = false
+            pcall(function()
+                local targetChar = lockedTarget.Parent
+                local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                if targetChar and targetHum and targetHum.Health > 0 and targetRoot then
+                    local vec, onScreen = Camera:WorldToViewportPoint(targetRoot.Position)
+                    local dist = (Vector2.new(vec.X, vec.Y) - mousePos).Magnitude
+                    if onScreen and dist <= Config.Aimbot.FOV and IsVisible(lockedTarget) then
+                        isValid = true
+                    end
+                end
+            end)
+            if not isValid then
+                lockedTarget = nil
             end
         end
+
+        if not lockedTarget then
+            lockedTarget = bestTarget
+        end
+
+        if lockedTarget and lockedTarget.Parent then
+            pcall(function()
+                local targetPos = lockedTarget.Position
+                if Config.Aimbot.Predict and lockedTarget.Parent:FindFirstChild("HumanoidRootPart") then
+                    local rootPart = lockedTarget.Parent.HumanoidRootPart
+                    local vel = rootPart.AssemblyLinearVelocity
+                    local dist = (lockedTarget.Position - Camera.CFrame.Position).Magnitude
+                    local ping = 0
+                    pcall(function() ping = LocalPlayer:GetNetworkPing() end)
+                    -- Predicción avanzada considerando velocidad, distancia y ping
+                    local leadTime = (dist / Config.Aimbot.PredictionMultiplier) + ping
+                    targetPos = targetPos + (vel * leadTime)
+                end
+                
+                local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+                if Config.Aimbot.Smoothness > 1 then
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 / Config.Aimbot.Smoothness)
+                else
+                    Camera.CFrame = targetCFrame
+                end
+            end)
+        end
+    end
+
+    -- TRIGGERBOT LOGIC
+    if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot then
+        pcall(function()
+            local mouseTarget = LocalPlayer:GetMouse().Target
+            if mouseTarget and mouseTarget.Parent then
+                local enemyChar = mouseTarget.Parent
+                local enemyHum = enemyChar:FindFirstChildOfClass("Humanoid")
+                local enemyPlayer = Players:GetPlayerFromCharacter(enemyChar)
+                if enemyHum and enemyHum.Health > 0 and enemyPlayer and enemyPlayer ~= LocalPlayer then
+                    if not IsTeammate(enemyPlayer) then
+                        mouse1click()
+                    end
+                end
+            end
+        end)
     end
 end))
