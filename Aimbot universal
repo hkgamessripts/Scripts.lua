@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V4 (Ultimate Build)
+    HKSTUDIO ELITE HUB - V4 (Ultimate Build Fixed)
     Zero-Lag Optimization | Nytro.cc UI Clone | Advanced Cache
 ]]
 
@@ -8,7 +8,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
@@ -229,7 +228,7 @@ local function CreateTab(icon, name)
     local btn = Instance.new("TextButton", tabContainer)
     btn.Size = UDim2.new(1, 0, 0, 35)
     btn.BackgroundTransparency = 1
-    btn.Text = "  " .. icon .. "  " .. name
+    btn.Text = "   " .. icon .. "   " .. name
     btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.Font = Enum.Font.GothamSemibold
@@ -516,14 +515,14 @@ end)
 
 -- Dropdown Jugadores
 CreateDropdown(tabLocal, "Teleport a Jugador", 
-    function() -- Callback para obtener lista
+    function()
         local list = {}
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer then table.insert(list, p) end
         end
         return list
     end, 
-    function(selectedPlayer) -- Callback al seleccionar
+    function(selectedPlayer)
         if selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.Character.HumanoidRootPart.CFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0,0,3)
             Notify("Teleport", "Viajando a " .. selectedPlayer.Name)
@@ -537,14 +536,15 @@ CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
     for _, con in pairs(Connections) do con:Disconnect() end
     hkGui:Destroy()
     
-    -- Limpieza profunda de memoria
     for _, p in pairs(Players:GetPlayers()) do
         if p.Character and p.Character:FindFirstChild("HkChams") then p.Character.HkChams:Destroy() end
     end
-    -- Ocultar e invalidar Drawing API
     if _G.HkFovCircle then _G.HkFovCircle:Remove() end
     for _, esp in pairs(_G.HkDrawingCache or {}) do
-        esp.Box:Remove(); esp.Tracer:Remove(); esp.Name:Remove(); esp.Dist:Remove()
+        if esp.Box then pcall(function() esp.Box:Remove() end) end
+        if esp.Tracer then pcall(function() esp.Tracer:Remove() end) end
+        if esp.Name then pcall(function() esp.Name:Remove() end) end
+        if esp.Dist then pcall(function() esp.Dist:Remove() end) end
     end
     print("[HkStudio] Borrado limpio completado.")
 end)
