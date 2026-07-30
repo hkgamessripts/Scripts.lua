@@ -1,46 +1,40 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- ==========================================
--- 1. CONFIGURACIÓN Y SISTEMA DE ALIANZAS
--- ==========================================
-local ThemeColor = Color3.fromRGB(120, 80, 255)  -- Púrpura Neón
-local EnemyColor = Color3.fromRGB(255, 35, 35)   -- Rojo Neón (Enemigos)
-local BgDark = Color3.fromRGB(18, 18, 22)        -- Fondo Principal
-local BgLight = Color3.fromRGB(28, 28, 34)       -- Fondo Secundario
-local TextWhite = Color3.fromRGB(220, 220, 225)
-local FovColor = Color3.fromRGB(150, 150, 150)   -- Gris Neón
+-- Localización de funciones para máximo rendimiento (Caché)
+local Vector2New = Vector2.new
+local UDim2New = UDim2.new
+local Color3FromRGB = Color3.fromRGB
+local CFrameLookAt = CFrame.lookAt
+local MathClamp = math.clamp
+local MathFloor = math.floor
+local MathDeg = math.deg
+local MathAtan2 = math.atan2
 
--- TABLA DE ALIANZAS (AQUÍ PUEDES AGREGAR MÁS EQUIPOS ALIADOS)
+-- ==========================================
+-- 1. CONFIGURACIÓN Y ALIANZAS
+-- ==========================================
+local ThemeColor = Color3FromRGB(120, 80, 255)  -- Púrpura Neón
+local EnemyColor = Color3FromRGB(255, 35, 35)   -- Rojo Neón
+local BgDark = Color3FromRGB(18, 18, 22)
+local BgLight = Color3FromRGB(28, 28, 34)
+local TextWhite = Color3FromRGB(220, 220, 225)
+local FovColor = Color3FromRGB(150, 150, 150)
+
+-- Tabla de alianzas (En minúsculas para comparación rápida)
 local FactionAlliances = {
-    -- Fuerzas del Orden / Aliados
-    ["Police"] = "LawEnforcement",
-    ["Policia"] = "LawEnforcement",
-    ["Military"] = "LawEnforcement",
-    ["Ejercito"] = "LawEnforcement",
-    ["Army"] = "LawEnforcement",
-    ["SWAT"] = "LawEnforcement",
-    ["Guard"] = "LawEnforcement",
-
-    -- Ilegales / Delincuentes
-    ["Criminals"] = "Outlaws",
-    ["Criminales"] = "Outlaws",
-    ["Prisoners"] = "Outlaws",
-    ["Presos"] = "Outlaws",
-    ["Inmates"] = "Outlaws",
-    ["Mafia"] = "Outlaws"
+    ["police"] = "law", ["policia"] = "law", ["military"] = "law", ["ejercito"] = "law", ["army"] = "law", ["swat"] = "law", ["guard"] = "law",
+    ["criminals"] = "outlaw", ["criminales"] = "outlaw", ["prisoners"] = "outlaw", ["presos"] = "outlaw", ["inmates"] = "outlaw", ["mafia"] = "outlaw"
 }
 
 local Settings = {
     Enabled = true,
     WallCheck = true,
-    SmartTeamCheck = true, -- Smart Team Check Inteligente
-    IgnoreForceFields = true, -- Ignora jugadores inmunes (spawn)
+    TeamCheck = true, -- Toggle único unificado
     Chams = true,
     Skeleton = true,
     Rainbow = false,
@@ -52,7 +46,7 @@ local lockedTarget = nil
 local currentColor = ThemeColor
 
 -- ==========================================
--- 2. CREACIÓN DE LA INTERFAZ COMPLETA
+-- 2. INTERFAZ GRÁFICA (HKSTUDIO)
 -- ==========================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "HkStudioGui"
@@ -60,10 +54,10 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- HUD ARRIBA (FPS y Ping - ARRASTRABLE)
+-- HUD ARRIBA (FPS y Ping - Movible)
 local topHud = Instance.new("Frame")
-topHud.Size = UDim2.new(0, 250, 0, 25)
-topHud.Position = UDim2.new(0, 200, 0, 20)
+topHud.Size = UDim2New(0, 250, 0, 25)
+topHud.Position = UDim2New(0, 200, 0, 20)
 topHud.BackgroundColor3 = BgDark
 topHud.Active = true
 topHud.Parent = gui
@@ -74,8 +68,8 @@ topStroke.Color = ThemeColor
 topStroke.Thickness = 1
 
 local topText = Instance.new("TextLabel")
-topText.Size = UDim2.new(1, -10, 1, 0)
-topText.Position = UDim2.new(0, 10, 0, 0)
+topText.Size = UDim2New(1, -10, 1, 0)
+topText.Position = UDim2New(0, 10, 0, 0)
 topText.BackgroundTransparency = 1
 topText.TextXAlignment = Enum.TextXAlignment.Left
 topText.TextColor3 = TextWhite
@@ -84,7 +78,7 @@ topText.TextSize = 12
 topText.Text = "HkStudio [Elite] | FPS: -- | Ping: --"
 topText.Parent = topHud
 
--- Arrastre del HUD
+-- Sistema de Arrastre de HUD
 local draggingHud, dragInput, dragStart, startPos
 topHud.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -102,15 +96,15 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and draggingHud then
         local delta = input.Position - dragStart
-        topHud.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        topHud.Position = UDim2New(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
 -- CÍRCULO FOV
 local fovCircle = Instance.new("Frame")
 fovCircle.Name = "FOVCircle"
-fovCircle.Size = UDim2.new(0, 300, 0, 300)
-fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Size = UDim2New(0, 300, 0, 300)
+fovCircle.AnchorPoint = Vector2New(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
 fovCircle.Parent = gui
 
@@ -119,10 +113,10 @@ local circleStroke = Instance.new("UIStroke", fovCircle)
 circleStroke.Color = FovColor
 circleStroke.Thickness = 1
 
--- TARJETA DE INFORMACIÓN DE OBJETIVO (Target Info)
+-- TARJETA DE INFORMACIÓN DE OBJETIVO (Target Card)
 local targetCard = Instance.new("Frame")
 targetCard.Name = "TargetCard"
-targetCard.Size = UDim2.new(0, 170, 0, 50)
+targetCard.Size = UDim2New(0, 170, 0, 50)
 targetCard.BackgroundColor3 = BgDark
 targetCard.Visible = false
 targetCard.Parent = gui
@@ -133,8 +127,8 @@ targetCardStroke.Color = ThemeColor
 targetCardStroke.Thickness = 1
 
 local targetName = Instance.new("TextLabel")
-targetName.Size = UDim2.new(1, -16, 0, 22)
-targetName.Position = UDim2.new(0, 8, 0, 4)
+targetName.Size = UDim2New(1, -16, 0, 22)
+targetName.Position = UDim2New(0, 8, 0, 4)
 targetName.BackgroundTransparency = 1
 targetName.TextXAlignment = Enum.TextXAlignment.Left
 targetName.TextColor3 = TextWhite
@@ -144,20 +138,20 @@ targetName.Text = "Target: None"
 targetName.Parent = targetCard
 
 local healthBarBg = Instance.new("Frame")
-healthBarBg.Size = UDim2.new(1, -16, 0, 12)
-healthBarBg.Position = UDim2.new(0, 8, 0, 28)
+healthBarBg.Size = UDim2New(1, -16, 0, 12)
+healthBarBg.Position = UDim2New(0, 8, 0, 28)
 healthBarBg.BackgroundColor3 = BgLight
 healthBarBg.Parent = targetCard
 Instance.new("UICorner", healthBarBg).CornerRadius = UDim.new(0, 4)
 
 local healthBarFill = Instance.new("Frame")
-healthBarFill.Size = UDim2.new(1, 0, 1, 0)
-healthBarFill.BackgroundColor3 = Color3.fromRGB(0, 220, 120)
+healthBarFill.Size = UDim2New(1, 0, 1, 0)
+healthBarFill.BackgroundColor3 = Color3FromRGB(0, 220, 120)
 healthBarFill.Parent = healthBarBg
 Instance.new("UICorner", healthBarFill).CornerRadius = UDim.new(0, 4)
 
 local healthText = Instance.new("TextLabel")
-healthText.Size = UDim2.new(1, 0, 1, 0)
+healthText.Size = UDim2New(1, 0, 1, 0)
 healthText.BackgroundTransparency = 1
 healthText.TextColor3 = TextWhite
 healthText.Font = Enum.Font.GothamBold
@@ -165,10 +159,10 @@ healthText.TextSize = 9
 healthText.Text = "100 HP"
 healthText.Parent = healthBarBg
 
--- MENÚ PRINCIPAL CON SCROLL
+-- MENÚ PRINCIPAL
 local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0, 320, 0, 380)
-menuFrame.Position = UDim2.new(0.5, -160, 0.5, -190)
+menuFrame.Size = UDim2New(0, 320, 0, 350)
+menuFrame.Position = UDim2New(0.5, -160, 0.5, -175)
 menuFrame.BackgroundColor3 = BgDark
 menuFrame.Visible = false
 menuFrame.Parent = gui
@@ -179,8 +173,8 @@ menuStroke.Color = ThemeColor
 menuStroke.Thickness = 1
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 40)
-title.Position = UDim2.new(0, 20, 0, 0)
+title.Size = UDim2New(1, -20, 0, 40)
+title.Position = UDim2New(0, 20, 0, 0)
 title.BackgroundTransparency = 1
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.TextColor3 = ThemeColor
@@ -190,12 +184,12 @@ title.Text = "HkStudio"
 title.Parent = menuFrame
 
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -50)
-scroll.Position = UDim2.new(0, 10, 0, 40)
+scroll.Size = UDim2New(1, -20, 1, -50)
+scroll.Position = UDim2New(0, 10, 0, 40)
 scroll.BackgroundTransparency = 1
 scroll.ScrollBarThickness = 4
 scroll.ScrollBarImageColor3 = ThemeColor
-scroll.CanvasSize = UDim2.new(0, 0, 0, 480)
+scroll.CanvasSize = UDim2New(0, 0, 0, 390)
 scroll.Parent = menuFrame
 
 local listLayout = Instance.new("UIListLayout")
@@ -203,17 +197,17 @@ listLayout.Padding = UDim.new(0, 8)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = scroll
 
--- Función para Crear Toggles
+-- Creador de Toggles
 local function CreateToggle(name, defaultState, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -10, 0, 40)
+    frame.Size = UDim2New(1, -10, 0, 40)
     frame.BackgroundColor3 = BgLight
     frame.Parent = scroll
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
     
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -50, 1, 0)
-    label.Position = UDim2.new(0, 12, 0, 0)
+    label.Size = UDim2New(1, -50, 1, 0)
+    label.Position = UDim2New(0, 12, 0, 0)
     label.BackgroundTransparency = 1
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextColor3 = TextWhite
@@ -223,25 +217,25 @@ local function CreateToggle(name, defaultState, callback)
     label.Parent = frame
     
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 30, 0, 16)
-    btn.Position = UDim2.new(1, -40, 0.5, -8)
-    btn.BackgroundColor3 = defaultState and ThemeColor or Color3.fromRGB(60, 60, 60)
+    btn.Size = UDim2New(0, 30, 0, 16)
+    btn.Position = UDim2New(1, -40, 0.5, -8)
+    btn.BackgroundColor3 = defaultState and ThemeColor or Color3FromRGB(60, 60, 60)
     btn.Text = ""
     btn.Parent = frame
     Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
     
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 12, 0, 12)
-    knob.Position = defaultState and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.Size = UDim2New(0, 12, 0, 12)
+    knob.Position = defaultState and UDim2New(1, -14, 0.5, -6) or UDim2New(0, 2, 0.5, -6)
+    knob.BackgroundColor3 = Color3FromRGB(255, 255, 255)
     knob.Parent = btn
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
     
     btn.MouseButton1Click:Connect(function()
         local newState = not Settings[callback]
         Settings[callback] = newState
-        btn.BackgroundColor3 = newState and currentColor or Color3.fromRGB(60, 60, 60)
-        knob.Position = newState and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+        btn.BackgroundColor3 = newState and currentColor or Color3FromRGB(60, 60, 60)
+        knob.Position = newState and UDim2New(1, -14, 0.5, -6) or UDim2New(0, 2, 0.5, -6)
         if callback == "Enabled" then fovCircle.Visible = newState end
     end)
     return btn
@@ -249,22 +243,21 @@ end
 
 CreateToggle("Master Aimbot", true, "Enabled")
 CreateToggle("Wall Check", true, "WallCheck")
-CreateToggle("Smart Team Check", true, "SmartTeamCheck")
-CreateToggle("Ignore ForceFields", true, "IgnoreForceFields")
+CreateToggle("Team Check", true, "TeamCheck")
 CreateToggle("Chams (ESP Highlight)", true, "Chams")
 CreateToggle("Bone Skeleton", true, "Skeleton")
 CreateToggle("Rainbow ESP", false, "Rainbow")
 
 -- Slider FOV
 local sliderBg = Instance.new("Frame")
-sliderBg.Size = UDim2.new(1, -10, 0, 60)
+sliderBg.Size = UDim2New(1, -10, 0, 60)
 sliderBg.BackgroundColor3 = BgLight
 sliderBg.Parent = scroll
 Instance.new("UICorner", sliderBg).CornerRadius = UDim.new(0, 6)
 
 local sliderTitle = Instance.new("TextLabel")
-sliderTitle.Size = UDim2.new(1, -20, 0, 25)
-sliderTitle.Position = UDim2.new(0, 12, 0, 2)
+sliderTitle.Size = UDim2New(1, -20, 0, 25)
+sliderTitle.Position = UDim2New(0, 12, 0, 2)
 sliderTitle.BackgroundTransparency = 1
 sliderTitle.TextXAlignment = Enum.TextXAlignment.Left
 sliderTitle.TextColor3 = TextWhite
@@ -274,61 +267,59 @@ sliderTitle.Text = "FOV Radius"
 sliderTitle.Parent = sliderBg
 
 local sliderTrack = Instance.new("Frame")
-sliderTrack.Size = UDim2.new(1, -24, 0, 6)
-sliderTrack.Position = UDim2.new(0, 12, 0, 38)
-sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+sliderTrack.Size = UDim2New(1, -24, 0, 6)
+sliderTrack.Position = UDim2New(0, 12, 0, 38)
+sliderTrack.BackgroundColor3 = Color3FromRGB(60, 60, 60)
 sliderTrack.Active = true
 sliderTrack.Parent = sliderBg
 Instance.new("UICorner", sliderTrack).CornerRadius = UDim.new(1, 0)
 
 local sliderFill = Instance.new("Frame")
-sliderFill.Size = UDim2.new(0.3, 0, 1, 0)
+sliderFill.Size = UDim2New(0.3, 0, 1, 0)
 sliderFill.BackgroundColor3 = ThemeColor
 sliderFill.Parent = sliderTrack
 Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
 
--- Contenedor de Líneas de Esqueleto
 local skeletonHolder = Instance.new("Folder")
 skeletonHolder.Name = "Skeletons"
 skeletonHolder.Parent = gui
 
 -- ==========================================
--- 3. LÓGICA DEL SMART TEAM CHECK
+-- 3. LÓGICA OPTIMIZADA DE TEAM CHECK
 -- ==========================================
 local draggingSlider = false
 
 local function IsTeammate(player)
-    if not Settings.SmartTeamCheck then return false end
+    if not Settings.TeamCheck then return false end
     if player == LocalPlayer then return true end
 
-    -- A. Escudo de Protección / Spawn (ForceField)
-    if Settings.IgnoreForceFields and player.Character then
-        if player.Character:FindFirstChildOfClass("ForceField") then
-            return true -- Se considera "intocable" temporalmente
-        end
+    local char = player.Character
+    if not char then return false end
+
+    -- Escudo de Spawn (Inmunidad)
+    if char:FindFirstChildOfClass("ForceField") then
+        return true
     end
 
-    -- B. Mismo Equipo Directo
-    if player.Team ~= nil and LocalPlayer.Team ~= nil then
-        if player.Team == LocalPlayer.Team then
-            return true
-        end
+    -- Mismo equipo directo
+    local myTeam, targetTeam = LocalPlayer.Team, player.Team
+    if myTeam and targetTeam then
+        if myTeam == targetTeam then return true end
 
-        -- C. Comprobación de Alianzas Faccionales (Ejemplo: Policía + Ejército)
-        local myTeamName = LocalPlayer.Team.Name
-        local targetTeamName = player.Team.Name
-
-        local myAlliance = FactionAlliances[myTeamName]
-        local targetAlliance = FactionAlliances[targetTeamName]
+        -- Alianzas (Convertido a minúsculas para evitar fallos de formato)
+        local myAlliance = FactionAlliances[myTeam.Name:lower()]
+        local targetAlliance = FactionAlliances[targetTeam.Name:lower()]
 
         if myAlliance and targetAlliance and myAlliance == targetAlliance then
-            return true -- Aliados por Facción (No se hacen daño)
+            return true
         end
     end
 
-    -- D. Comprobación por Color de Equipo (TeamColor)
-    if player.TeamColor == LocalPlayer.TeamColor and player.TeamColor ~= BrickColor.new("White") then
-        return true
+    -- Color de equipo fallback
+    if LocalPlayer.TeamColor and player.TeamColor and LocalPlayer.TeamColor == player.TeamColor then
+        if LocalPlayer.TeamColor ~= BrickColor.new("White") then
+            return true
+        end
     end
 
     return false
@@ -358,16 +349,16 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mouseX = UserInputService:GetMouseLocation().X
-        local relativeX = math.clamp(mouseX - sliderTrack.AbsolutePosition.X, 0, sliderTrack.AbsoluteSize.X)
+        local relativeX = MathClamp(mouseX - sliderTrack.AbsolutePosition.X, 0, sliderTrack.AbsoluteSize.X)
         local percentage = relativeX / sliderTrack.AbsoluteSize.X
         
-        sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+        sliderFill.Size = UDim2New(percentage, 0, 1, 0)
         Settings.FOVRadius = 50 + (percentage * 450)
-        fovCircle.Size = UDim2.new(0, Settings.FOVRadius * 2, 0, Settings.FOVRadius * 2)
+        fovCircle.Size = UDim2New(0, Settings.FOVRadius * 2, 0, Settings.FOVRadius * 2)
     end
 end)
 
--- Wall Check
+-- Raycast de Pared (Solo se llama al candidato seleccionado, no en bucle)
 local function IsVisible(targetPart)
     if not Settings.WallCheck then return true end
     local rayParams = RaycastParams.new()
@@ -382,14 +373,14 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. RENDERING ESQUELETO 2D
+-- 4. RENDERING ESQUELETO 2D (POOLING)
 -- ==========================================
 local linePool = {}
 local lineIndex = 0
 
 local function ClearLines()
     lineIndex = 0
-    for _, line in ipairs(linePool) do line.Visible = false end
+    for i = 1, #linePool do linePool[i].Visible = false end
 end
 
 local function DrawLine(p1, p2, color)
@@ -397,7 +388,7 @@ local function DrawLine(p1, p2, color)
     local line = linePool[lineIndex]
     if not line then
         line = Instance.new("Frame")
-        line.AnchorPoint = Vector2.new(0.5, 0.5)
+        line.AnchorPoint = Vector2New(0.5, 0.5)
         line.BorderSizePixel = 0
         line.Parent = skeletonHolder
         table.insert(linePool, line)
@@ -405,10 +396,10 @@ local function DrawLine(p1, p2, color)
     
     local dist = (p2 - p1).Magnitude
     local center = (p1 + p2) / 2
-    local angle = math.deg(math.atan2(p2.Y - p1.Y, p2.X - p1.X))
+    local angle = MathDeg(MathAtan2(p2.Y - p1.Y, p2.X - p1.X))
     
-    line.Size = UDim2.new(0, dist, 0, 2)
-    line.Position = UDim2.new(0, center.X, 0, center.Y)
+    line.Size = UDim2New(0, dist, 0, 2)
+    line.Position = UDim2New(0, center.X, 0, center.Y)
     line.Rotation = angle
     line.BackgroundColor3 = color
     line.Visible = true
@@ -425,12 +416,12 @@ local bonePairs = {
 }
 
 -- ==========================================
--- 5. BUCLE PRINCIPAL (RENDERSTEPPED)
+-- 5. BUCLE PRINCIPAL ALTA FRECUENCIA
 -- ==========================================
 local frameCount, step = 0, 0
 
 RunService.RenderStepped:Connect(function(dt)
-    -- 1. Efecto Rainbow
+    -- 1. Color Dinámico
     if Settings.Rainbow then
         currentColor = Color3.fromHSV(tick() % 3 / 3, 0.8, 1)
     else
@@ -441,27 +432,26 @@ RunService.RenderStepped:Connect(function(dt)
     targetCardStroke.Color = currentColor
     sliderFill.BackgroundColor3 = currentColor
 
-    -- 2. FPS y Ping
+    -- 2. FPS & Ping
     step = step + dt
     frameCount = frameCount + 1
     if step >= 1 then
         local ping = 0
-        pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing() * 1000) end)
+        pcall(function() ping = MathFloor(LocalPlayer:GetNetworkPing() * 1000) end)
         topText.Text = string.format("HkStudio [Elite] | FPS: %d | Ping: %dms", frameCount, ping)
         step, frameCount = 0, 0
     end
 
-    -- 3. Círculo FOV al Mouse
+    -- 3. FOV Sigue al Mouse
     local mouseLoc = UserInputService:GetMouseLocation()
-    fovCircle.Position = UDim2.new(0, mouseLoc.X, 0, mouseLoc.Y)
+    fovCircle.Position = UDim2New(0, mouseLoc.X, 0, mouseLoc.Y)
 
-    -- 4. Limpieza de Líneas
     ClearLines()
 
-    -- 5. Bucle de Jugadores
     local bestTarget = nil
     local shortestDistance = Settings.FOVRadius
 
+    -- Bucle Rápido sobre Jugadores
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local char = player.Character
@@ -469,16 +459,13 @@ RunService.RenderStepped:Connect(function(dt)
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             local highlight = char:FindFirstChild("HkChams")
             
-            -- Evaluación con Smart Team Check
             local isTeam = IsTeammate(player)
             
             if isTeam then
-                -- Si es considerado aliado/intocable, quitamos Chams
                 if highlight then highlight:Destroy() end
             elseif head and humanoid and humanoid.Health > 0 then
                 
-                -- Color según estado: Rojo Neón si es enemigo válido
-                local visualColor = (Settings.SmartTeamCheck and EnemyColor) or currentColor
+                local visualColor = (Settings.TeamCheck and EnemyColor) or currentColor
                 
                 -- CHAMS
                 if Settings.Chams then
@@ -491,34 +478,36 @@ RunService.RenderStepped:Connect(function(dt)
                         highlight.Parent = char
                     end
                     highlight.FillColor = visualColor
-                    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    highlight.OutlineColor = Color3FromRGB(255, 255, 255)
                 elseif highlight then
                     highlight:Destroy()
                 end
 
                 -- ESQUELETO 2D
                 if Settings.Skeleton then
-                    for _, pair in ipairs(bonePairs) do
+                    for i = 1, #bonePairs do
+                        local pair = bonePairs[i]
                         local partA = char:FindFirstChild(pair[1])
                         local partB = char:FindFirstChild(pair[2])
                         if partA and partB then
                             local pA, visA = Camera:WorldToViewportPoint(partA.Position)
                             local pB, visB = Camera:WorldToViewportPoint(partB.Position)
                             if visA and visB then
-                                DrawLine(Vector2.new(pA.X, pA.Y), Vector2.new(pB.X, pB.Y), visualColor)
+                                DrawLine(Vector2New(pA.X, pA.Y), Vector2New(pB.X, pB.Y), visualColor)
                             end
                         end
                     end
                 end
 
-                -- AIMBOT
+                -- BÚSQUEDA DE AIMBOT (Cálculo puro 2D sin Raycast aún)
                 local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
-                    local targetPos2D = Vector2.new(screenPoint.X, screenPoint.Y)
+                    local targetPos2D = Vector2New(screenPoint.X, screenPoint.Y)
                     local distance = (mouseLoc - targetPos2D).Magnitude
                     
-                    if distance <= Settings.FOVRadius and IsVisible(head) then
-                        if distance < shortestDistance then
+                    if distance < shortestDistance then
+                        -- Solo ejecuta Raycast si el jugador supera la distancia del candidato anterior
+                        if IsVisible(head) then
                             shortestDistance = distance
                             bestTarget = head
                         end
@@ -528,14 +517,13 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- 6. LÓGICA DE TARGET LOCK Y AIMBOT
+    -- 6. APLICACIÓN DE TARGET LOCK
     if Settings.Enabled and isAiming then
         if lockedTarget then
             local char = lockedTarget.Parent
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local plr = char and Players:GetPlayerFromCharacter(char)
             
-            -- Liberar si murió, perdió visión o pasó a ser aliado/intocable
             if not (char and hum and hum.Health > 0 and IsVisible(lockedTarget) and not IsTeammate(plr)) then
                 lockedTarget = nil
             end
@@ -546,17 +534,17 @@ RunService.RenderStepped:Connect(function(dt)
         end
 
         if lockedTarget then
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, lockedTarget.Position)
+            Camera.CFrame = CFrameLookAt(Camera.CFrame.Position, lockedTarget.Position)
             
             local char = lockedTarget.Parent
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then
                 targetName.Text = "Target: " .. char.Name
-                local healthPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                healthBarFill.Size = UDim2.new(healthPct, 0, 1, 0)
-                healthText.Text = string.format("%d / %d HP", math.floor(hum.Health), math.floor(hum.MaxHealth))
+                local healthPct = MathClamp(hum.Health / hum.MaxHealth, 0, 1)
+                healthBarFill.Size = UDim2New(healthPct, 0, 1, 0)
+                healthText.Text = string.format("%d / %d HP", MathFloor(hum.Health), MathFloor(hum.MaxHealth))
                 
-                targetCard.Position = UDim2.new(0, mouseLoc.X + Settings.FOVRadius + 15, 0, mouseLoc.Y - 25)
+                targetCard.Position = UDim2New(0, mouseLoc.X + Settings.FOVRadius + 15, 0, mouseLoc.Y - 25)
                 targetCard.Visible = true
             end
         else
