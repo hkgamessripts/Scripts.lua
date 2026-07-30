@@ -10,6 +10,7 @@ local Camera = workspace.CurrentCamera
 -- 1. CONFIGURACIÓN Y ESTILO (HKSTUDIO)
 -- ==========================================
 local ThemeColor = Color3.fromRGB(120, 80, 255)  -- Púrpura Neón
+local EnemyColor = Color3.fromRGB(255, 35, 35)   -- Rojo Neón (Enemigos)
 local BgDark = Color3.fromRGB(18, 18, 22)        -- Fondo Principal
 local BgLight = Color3.fromRGB(28, 28, 34)       -- Fondo Secundario
 local TextWhite = Color3.fromRGB(220, 220, 225)
@@ -18,6 +19,7 @@ local FovColor = Color3.fromRGB(150, 150, 150)   -- Gris Neón
 local Settings = {
     Enabled = true,
     WallCheck = true,
+    TeamCheck = false, -- Nueva opción de Team Check
     Chams = true,
     Skeleton = true,
     Rainbow = false,
@@ -25,7 +27,7 @@ local Settings = {
 }
 
 local isAiming = false
-local lockedTarget = nil -- Objetivo fijado durante la ráfaga
+local lockedTarget = nil
 local currentColor = ThemeColor
 
 -- ==========================================
@@ -34,7 +36,7 @@ local currentColor = ThemeColor
 local gui = Instance.new("ScreenGui")
 gui.Name = "HkStudioGui"
 gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true -- Sincroniza el mouse con la pantalla 1:1
+gui.IgnoreGuiInset = true
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 -- HUD ARRIBA (FPS y Ping - ARRASTRABLE)
@@ -61,7 +63,7 @@ topText.TextSize = 12
 topText.Text = "HkStudio [Elite] | FPS: -- | Ping: --"
 topText.Parent = topHud
 
--- Arrastre del HUD de FPS
+-- Arrastre del HUD
 local draggingHud, dragInput, dragStart, startPos
 topHud.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -83,7 +85,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- CÍRCULO FOV (Sigue al mouse)
+-- CÍRCULO FOV
 local fovCircle = Instance.new("Frame")
 fovCircle.Name = "FOVCircle"
 fovCircle.Size = UDim2.new(0, 300, 0, 300)
@@ -96,7 +98,7 @@ local circleStroke = Instance.new("UIStroke", fovCircle)
 circleStroke.Color = FovColor
 circleStroke.Thickness = 1
 
--- TARJETA DE INFORMACIÓN DE OBJETIVO (Al lado del mouse)
+-- TARJETA DE INFORMACIÓN DE OBJETIVO (Target Info)
 local targetCard = Instance.new("Frame")
 targetCard.Name = "TargetCard"
 targetCard.Size = UDim2.new(0, 170, 0, 50)
@@ -144,8 +146,8 @@ healthText.Parent = healthBarBg
 
 -- MENÚ PRINCIPAL CON SCROLL
 local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0, 320, 0, 360)
-menuFrame.Position = UDim2.new(0.5, -160, 0.5, -180)
+menuFrame.Size = UDim2.new(0, 320, 0, 380)
+menuFrame.Position = UDim2.new(0.5, -160, 0.5, -190)
 menuFrame.BackgroundColor3 = BgDark
 menuFrame.Visible = false
 menuFrame.Parent = gui
@@ -172,7 +174,7 @@ scroll.Position = UDim2.new(0, 10, 0, 40)
 scroll.BackgroundTransparency = 1
 scroll.ScrollBarThickness = 4
 scroll.ScrollBarImageColor3 = ThemeColor
-scroll.CanvasSize = UDim2.new(0, 0, 0, 380)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 430)
 scroll.Parent = menuFrame
 
 local listLayout = Instance.new("UIListLayout")
@@ -180,7 +182,7 @@ listLayout.Padding = UDim.new(0, 8)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = scroll
 
--- Función para Crear Toggles en el Menú
+-- Función para Crear Toggles
 local function CreateToggle(name, defaultState, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 40)
@@ -226,11 +228,12 @@ end
 
 CreateToggle("Master Aimbot", true, "Enabled")
 CreateToggle("Wall Check", true, "WallCheck")
-CreateToggle("Chams (Neon Purple)", true, "Chams")
+CreateToggle("Team Check", false, "TeamCheck") -- Toggle de Team Check
+CreateToggle("Chams (ESP Highlight)", true, "Chams")
 CreateToggle("Bone Skeleton", true, "Skeleton")
 CreateToggle("Rainbow ESP", false, "Rainbow")
 
--- Slider de FOV
+-- Slider FOV
 local sliderBg = Instance.new("Frame")
 sliderBg.Size = UDim2.new(1, -10, 0, 60)
 sliderBg.BackgroundColor3 = BgLight
@@ -262,15 +265,23 @@ sliderFill.BackgroundColor3 = ThemeColor
 sliderFill.Parent = sliderTrack
 Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
 
--- Contenedor para Líneas de Esqueleto
+-- Contenedor de Líneas de Esqueleto
 local skeletonHolder = Instance.new("Folder")
 skeletonHolder.Name = "Skeletons"
 skeletonHolder.Parent = gui
 
 -- ==========================================
--- 3. LÓGICA DE EVENTOS E INPUTS
+-- 3. LÓGICA Y HELPERS
 -- ==========================================
 local draggingSlider = false
+
+local function IsTeammate(player)
+    if not Settings.TeamCheck then return false end
+    if player.Team ~= nil and LocalPlayer.Team ~= nil and player.Team == LocalPlayer.Team then
+        return true
+    end
+    return false
+end
 
 sliderBg.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = true end
@@ -280,7 +291,7 @@ UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = false end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         isAiming = false
-        lockedTarget = nil -- Libera el bloqueo al soltar el clic
+        lockedTarget = nil
     end
 end)
 
@@ -320,7 +331,7 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. RENDERING 2D: ESQUELETO Y CHAMS
+-- 4. RENDERING ESQUELETO 2D
 -- ==========================================
 local linePool = {}
 local lineIndex = 0
@@ -352,14 +363,12 @@ local function DrawLine(p1, p2, color)
     line.Visible = true
 end
 
--- Parejas de articulaciones (R15 y R6)
 local bonePairs = {
     {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
     {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
     {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
     {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
     {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
-    -- R6 fallback
     {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
     {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
 }
@@ -395,10 +404,10 @@ RunService.RenderStepped:Connect(function(dt)
     local mouseLoc = UserInputService:GetMouseLocation()
     fovCircle.Position = UDim2.new(0, mouseLoc.X, 0, mouseLoc.Y)
 
-    -- 4. Limpieza de Esqueleto
+    -- 4. Limpieza de Líneas
     ClearLines()
 
-    -- 5. Bucle de Jugadores (Chams, Skeleton y Selección de Aimbot)
+    -- 5. Bucle de Jugadores
     local bestTarget = nil
     local shortestDistance = Settings.FOVRadius
 
@@ -407,10 +416,20 @@ RunService.RenderStepped:Connect(function(dt)
             local char = player.Character
             local head = char:FindFirstChild("Head")
             local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local highlight = char:FindFirstChild("HkChams")
             
-            if head and humanoid and humanoid.Health > 0 then
-                -- CHAMS (HIGHLIGHT)
-                local highlight = char:FindFirstChild("HkChams")
+            -- Verificar si es un aliado cuando Team Check está encendido
+            local isTeam = IsTeammate(player)
+            
+            if isTeam then
+                -- Si es compañero y Team Check está activo, eliminamos su Highlight y no lo procesamos
+                if highlight then highlight:Destroy() end
+            elseif head and humanoid and humanoid.Health > 0 then
+                
+                -- Color según Team Check (Rojo Neón si es enemigo con TeamCheck activo, si no Morado/Rainbow)
+                local visualColor = (Settings.TeamCheck and EnemyColor) or currentColor
+                
+                -- CHAMS
                 if Settings.Chams then
                     if not highlight then
                         highlight = Instance.new("Highlight")
@@ -420,13 +439,13 @@ RunService.RenderStepped:Connect(function(dt)
                         highlight.OutlineTransparency = 0
                         highlight.Parent = char
                     end
-                    highlight.FillColor = currentColor
+                    highlight.FillColor = visualColor
                     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
                 elseif highlight then
                     highlight:Destroy()
                 end
 
-                -- BONE SKELETON (2D LINES)
+                -- ESQUELETO 2D
                 if Settings.Skeleton then
                     for _, pair in ipairs(bonePairs) do
                         local partA = char:FindFirstChild(pair[1])
@@ -435,13 +454,13 @@ RunService.RenderStepped:Connect(function(dt)
                             local pA, visA = Camera:WorldToViewportPoint(partA.Position)
                             local pB, visB = Camera:WorldToViewportPoint(partB.Position)
                             if visA and visB then
-                                DrawLine(Vector2.new(pA.X, pA.Y), Vector2.new(pB.X, pB.Y), currentColor)
+                                DrawLine(Vector2.new(pA.X, pA.Y), Vector2.new(pB.X, pB.Y), visualColor)
                             end
                         end
                     end
                 end
 
-                -- Detección de Aimbot
+                -- AIMBOT (Solo detecta si NO es aliado)
                 local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
                     local targetPos2D = Vector2.new(screenPoint.X, screenPoint.Y)
@@ -460,25 +479,24 @@ RunService.RenderStepped:Connect(function(dt)
 
     -- 6. LÓGICA DE TARGET LOCK Y AIMBOT
     if Settings.Enabled and isAiming then
-        -- Si ya tenemos un objetivo bloqueado, verificamos que siga vivo/visible
         if lockedTarget then
             local char = lockedTarget.Parent
             local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if not (char and hum and hum.Health > 0 and IsVisible(lockedTarget)) then
-                lockedTarget = nil -- Perdió visión o murió
+            local plr = char and Players:GetPlayerFromCharacter(char)
+            
+            -- Liberar si murió, perdió visión o cambió de equipo a aliado
+            if not (char and hum and hum.Health > 0 and IsVisible(lockedTarget) and not IsTeammate(plr)) then
+                lockedTarget = nil
             end
         end
 
-        -- Si no hay ninguno bloqueado, asigna el mejor encontrado
         if not lockedTarget then
             lockedTarget = bestTarget
         end
 
-        -- Aplicar Aimbot
         if lockedTarget then
             Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, lockedTarget.Position)
             
-            -- TARJETA DE INFORMACIÓN FLOTANTE (Al lado del mouse)
             local char = lockedTarget.Parent
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then
@@ -487,7 +505,6 @@ RunService.RenderStepped:Connect(function(dt)
                 healthBarFill.Size = UDim2.new(healthPct, 0, 1, 0)
                 healthText.Text = string.format("%d / %d HP", math.floor(hum.Health), math.floor(hum.MaxHealth))
                 
-                -- Posicionar afuera del círculo
                 targetCard.Position = UDim2.new(0, mouseLoc.X + Settings.FOVRadius + 15, 0, mouseLoc.Y - 25)
                 targetCard.Visible = true
             end
