@@ -5,7 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Localización de funciones para máximo rendimiento
+-- Localización de funciones para máximo rendimiento (Caché)
 local Vector2New = Vector2.new
 local UDim2New = UDim2.new
 local Color3FromRGB = Color3.fromRGB
@@ -25,9 +25,10 @@ local BgLight = Color3FromRGB(28, 28, 34)
 local TextWhite = Color3FromRGB(220, 220, 225)
 local FovColor = Color3FromRGB(150, 150, 150)
 
--- Palabras clave para identificación por patrones
-local LAW_KEYWORDS = {"police", "policia", "cop", "sheriff", "military", "ejercito", "army", "swat", "guard", "security", "guardia", "navy"}
-local OUTLAW_KEYWORDS = {"criminal", "crim", "prisoner", "preso", "inmate", "mafia", "gang", "terrorist", "outlaw", "robber"}
+-- Palabras clave para identificación inteligente de equipos (ES / EN)
+local LAW_KEYWORDS = {"police", "policia", "cop", "sheriff", "military", "ejercito", "army", "swat", "guard", "security", "guardia", "navy", "fbi", "cia"}
+local OUTLAW_KEYWORDS = {"criminal", "crim", "prisoner", "preso", "inmate", "mafia", "gang", "terrorist", "outlaw", "robber", "ladron", "sicario"}
+local CIVIL_KEYWORDS = {"civil", "citizen", "ciudadano", "habitante", "civilian", "pueblo", "neutral", "desempleado", "none"}
 
 local Settings = {
     Enabled = true,
@@ -52,7 +53,7 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- HUD ARRIBA (FPS / Ping)
+-- HUD Superior (FPS / Ping)
 local topHud = Instance.new("Frame")
 topHud.Size = UDim2New(0, 250, 0, 25)
 topHud.Position = UDim2New(0, 200, 0, 20)
@@ -101,7 +102,7 @@ end)
 -- CÍRCULO FOV
 local fovCircle = Instance.new("Frame")
 fovCircle.Name = "FOVCircle"
-fovCircle.Size = UDim2New(0, 300, 0, 300)
+fovCircle.Size = UDim2New(0, Settings.FOVRadius * 2, 0, Settings.FOVRadius * 2)
 fovCircle.AnchorPoint = Vector2New(0.5, 0.5)
 fovCircle.BackgroundTransparency = 1
 fovCircle.Parent = gui
@@ -287,7 +288,6 @@ skeletonHolder.Parent = gui
 -- ==========================================
 local draggingSlider = false
 
--- Clasificador de facciones por palabras clave
 local function GetFactionGroup(teamName)
     if not teamName or type(teamName) ~= "string" then return nil end
     local lowerName = teamName:lower()
@@ -298,67 +298,72 @@ local function GetFactionGroup(teamName)
     for i = 1, #OUTLAW_KEYWORDS do
         if lowerName:find(OUTLAW_KEYWORDS[i]) then return "outlaw" end
     end
+    for i = 1, #CIVIL_KEYWORDS do
+        if lowerName:find(CIVIL_KEYWORDS[i]) then return "civil" end
+    end
     return nil
 end
 
--- Lector multi-origen de nombre de equipo
 local function GetPlayerTeamName(player)
-    -- 1. game.Teams estándar
     if player.Team then return player.Team.Name end
 
-    -- 2. Attributes en Player
-    local attr = player:GetAttribute("Team") or player:GetAttribute("Faction") or player:GetAttribute("Role")
-    if attr then return tostring(attr) end
-
-    -- 3. Attributes en Character
-    if player.Character then
-        local charAttr = player.Character:GetAttribute("Team") or player.Character:GetAttribute("Faction")
-        if charAttr then return tostring(charAttr) end
+    local attributesToSearch = {"Team", "Faction", "Role", "Job", "Trabajo", "Equipo", "Rol"}
+    
+    for _, attr in ipairs(attributesToSearch) do
+        local val = player:GetAttribute(attr)
+        if val then return tostring(val) end
     end
 
-    -- 4. Values en Player / leaderstats
-    local teamVal = player:FindFirstChild("Team") or player:FindFirstChild("Faction")
-    if teamVal and teamVal:IsA("ValueBase") then return tostring(teamVal.Value) end
+    if player.Character then
+        for _, attr in ipairs(attributesToSearch) do
+            local val = player.Character:GetAttribute(attr)
+            if val then return tostring(val) end
+        end
+    end
 
     local leaderstats = player:FindFirstChild("leaderstats")
     if leaderstats then
-        local lTeam = leaderstats:FindFirstChild("Team") or leaderstats:FindFirstChild("Faction") or leaderstats:FindFirstChild("Role")
-        if lTeam and lTeam:IsA("ValueBase") then return tostring(lTeam.Value) end
+        for _, attr in ipairs(attributesToSearch) do
+            local val = leaderstats:FindFirstChild(attr) or player:FindFirstChild(attr)
+            if val and val:IsA("ValueBase") then return tostring(val.Value) end
+        end
     end
 
     return nil
 end
 
--- Evaluador principal de equipo
 local function IsTeammate(player)
     if not Settings.TeamCheck then return false end
     if player == LocalPlayer then return true end
 
-    -- Capa 0: Si alguno es Neutral por propiedad nativa, NO son equipo (Modo Libre / FFA)
-    if player.Neutral or LocalPlayer.Neutral then
-        return false
-    end
-
-    -- Capa 1: Análisis multi-origen de nombres de equipo
     local myTeamName = GetPlayerTeamName(LocalPlayer)
     local targetTeamName = GetPlayerTeamName(player)
 
     if myTeamName and targetTeamName then
-        -- Coincidencia directa de nombre
-        if myTeamName:lower() == targetTeamName:lower() then
-            return true
-        end
+        local myLower = myTeamName:lower()
+        local targetLower = targetTeamName:lower()
 
-        -- Coincidencia por facción inteligente (Ej. Policía y Ejército)
-        local myFaction = GetFactionGroup(myTeamName)
-        local targetFaction = GetFactionGroup(targetTeamName)
+        -- Coincidencia exacta de nombre (Ej: Ambos son "Guardia Civil")
+        if myLower == targetLower then return true end
 
-        if myFaction and targetFaction and myFaction == targetFaction then
-            return true
+        -- Coincidencia por facción
+        local myFaction = GetFactionGroup(myLower)
+        local targetFaction = GetFactionGroup(targetLower)
+
+        if myFaction and targetFaction then
+            if myFaction == targetFaction then return true end
+            
+            -- Reglas de Paz Roleplay: La Ley y los Civiles no se atacan entre sí
+            if (myFaction == "law" and targetFaction == "civil") or 
+               (myFaction == "civil" and targetFaction == "law") then
+                return true
+            end
         end
+        
+        return false 
     end
 
-    -- Capa 2: Fallback por TeamColor (SOLO si ambos tienen un equipo activo en game.Teams)
+    -- Fallback de seguridad por color (Solo si tienen equipo directo asignado)
     if LocalPlayer.Team ~= nil and player.Team ~= nil then
         if LocalPlayer.TeamColor == player.TeamColor then
             return true
@@ -368,13 +373,12 @@ local function IsTeammate(player)
     return false
 end
 
--- Chequeo exclusivo de inmunidad (No afecta al ESP, solo al Aimbot)
 local function IsInvulnerable(player)
     if not player.Character then return false end
     return player.Character:FindFirstChildOfClass("ForceField") ~= nil
 end
 
--- Controles de interfaz
+-- Controles de la Interfaz
 sliderBg.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = true end
 end)
@@ -408,7 +412,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Wall Check
+-- Wall Check Optimizado
 local function IsVisible(targetPart)
     if not Settings.WallCheck then return true end
     local rayParams = RaycastParams.new()
@@ -423,7 +427,7 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. RENDERING ESQUELETO 2D
+-- 4. RENDERING ESQUELETO 2D (POOLING)
 -- ==========================================
 local linePool = {}
 local lineIndex = 0
@@ -471,6 +475,7 @@ local bonePairs = {
 local frameCount, step = 0, 0
 
 RunService.RenderStepped:Connect(function(dt)
+    -- 1. Efectos Visuales
     if Settings.Rainbow then
         currentColor = Color3.fromHSV(tick() % 3 / 3, 0.8, 1)
     else
@@ -481,6 +486,7 @@ RunService.RenderStepped:Connect(function(dt)
     targetCardStroke.Color = currentColor
     sliderFill.BackgroundColor3 = currentColor
 
+    -- 2. FPS & Ping
     step = step + dt
     frameCount = frameCount + 1
     if step >= 1 then
@@ -490,6 +496,7 @@ RunService.RenderStepped:Connect(function(dt)
         step, frameCount = 0, 0
     end
 
+    -- 3. FOV Sigue al Mouse
     local mouseLoc = UserInputService:GetMouseLocation()
     fovCircle.Position = UDim2New(0, mouseLoc.X, 0, mouseLoc.Y)
 
@@ -498,6 +505,7 @@ RunService.RenderStepped:Connect(function(dt)
     local bestTarget = nil
     local shortestDistance = Settings.FOVRadius
 
+    -- Bucle de Rendimiento sobre Jugadores
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local char = player.Character
@@ -509,13 +517,12 @@ RunService.RenderStepped:Connect(function(dt)
             local isInvulnerable = IsInvulnerable(player)
             
             if isTeam then
-                -- Si es aliado, removemos Chams
                 if highlight then highlight:Destroy() end
             elseif head and humanoid and humanoid.Health > 0 then
                 
                 local visualColor = (Settings.TeamCheck and EnemyColor) or currentColor
                 
-                -- CHAMS (Incluso si tiene escudo, se dibuja en el ESP)
+                -- CHAMS ESP
                 if Settings.Chams then
                     if not highlight then
                         highlight = Instance.new("Highlight")
@@ -547,7 +554,7 @@ RunService.RenderStepped:Connect(function(dt)
                     end
                 end
 
-                -- AIMBOT (Solo selecciona como objetivo si NO es invulnerable)
+                -- BÚSQUEDA AIMBOT (Ignora invulnerables/escudos)
                 if not isInvulnerable then
                     local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
                     if onScreen then
@@ -566,7 +573,7 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
-    -- TARGET LOCK
+    -- 4. TARGET LOCK Y AIMBOT
     if Settings.Enabled and isAiming then
         if lockedTarget then
             local char = lockedTarget.Parent
