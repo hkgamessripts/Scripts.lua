@@ -1,6 +1,6 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.1 (Production Grade, Zero-Lag, Fully Hardened)
-    Architecture: Modular & Event-Driven Cleanup
+    HKSTUDIO ELITE HUB - V5.2 (Production Grade, Zero-Lag, Fully Hardened + Target HUD)
+    Architecture: Modular, Event-Driven Cleanup & Target Info Overlay
 ]]
 
 local Players = game:GetService("Players")
@@ -83,15 +83,11 @@ local OriginalDecalTransparencies = {}
 local OriginalTextureTransparencies = {}
 local OriginalTransparencies = {}
 
-local RaycastParamsCache = RaycastParams.new()
-RaycastParamsCache.FilterType = Enum.RaycastFilterType.Exclude
-RaycastParamsCache.IgnoreWater = true
-
 local VisibilityCache = {}
 local LastVisibilityClock = 0
 
 -- ==========================================
--- 2. SISTEMA DE NOTIFICACIONES (Cola y Límite)
+-- 2. SISTEMA DE NOTIFICACIONES Y TARGET HUD
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -162,6 +158,45 @@ local function Notify(title, text)
     end)
 end
 
+-- Target Info HUD (Cuadro de objetivo fijado con nombre y vida)
+local TargetHudFrame = Instance.new("Frame", hkGui)
+TargetHudFrame.Size = UDim2.new(0, 170, 0, 48)
+TargetHudFrame.BackgroundColor3 = BgDark
+TargetHudFrame.Visible = false
+TargetHudFrame.ZIndex = 5
+Instance.new("UICorner", TargetHudFrame).CornerRadius = UDim.new(0, 6)
+local targetHudStroke = Instance.new("UIStroke", TargetHudFrame)
+targetHudStroke.Color = ThemeColor
+targetHudStroke.Thickness = 1
+
+local targetNameLbl = Instance.new("TextLabel", TargetHudFrame)
+targetNameLbl.Size = UDim2.new(1, -12, 0, 18)
+targetNameLbl.Position = UDim2.new(0, 6, 0, 4)
+targetNameLbl.BackgroundTransparency = 1
+targetNameLbl.TextColor3 = TextWhite
+targetNameLbl.Font = Enum.Font.GothamBold
+targetNameLbl.TextSize = 11
+targetNameLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local targetHealthBg = Instance.new("Frame", TargetHudFrame)
+targetHealthBg.Size = UDim2.new(1, -12, 0, 8)
+targetHealthBg.Position = UDim2.new(0, 6, 0, 28)
+targetHealthBg.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+Instance.new("UICorner", targetHealthBg).CornerRadius = UDim.new(1, 0)
+
+local targetHealthFill = Instance.new("Frame", targetHealthBg)
+targetHealthFill.Size = UDim2.new(1, 0, 1, 0)
+targetHealthFill.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+Instance.new("UICorner", targetHealthFill).CornerRadius = UDim.new(1, 0)
+
+local targetHealthText = Instance.new("TextLabel", targetHealthBg)
+targetHealthText.Size = UDim2.new(1, 0, 1, 0)
+targetHealthText.BackgroundTransparency = 1
+targetHealthText.TextColor3 = TextWhite
+targetHealthText.Font = Enum.Font.GothamBold
+targetHealthText.TextSize = 9
+targetHealthText.Text = "100%"
+
 local function CheckCooldown(actionName, cooldownTime)
     local now = tick()
     if CooldownTable[actionName] and (now - CooldownTable[actionName]) < cooldownTime then
@@ -193,7 +228,6 @@ topText.Font = Enum.Font.GothamBold
 topText.TextSize = 12
 topText.Text = "HkStudio | FPS: -- | Ping: --"
 
--- Contador de FPS preciso basado en DeltaTime
 local frameAccumulator, frameCount = 0, 0
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     frameAccumulator = frameAccumulator + dt
@@ -245,7 +279,6 @@ local function IsSafeDestination(cframe)
     return ray ~= nil
 end
 
--- IsVisible sin RenderStepped:Wait() (Uso estricto de reloj temporal)
 local function IsVisible(targetPart)
     if not Config.Aimbot.WallCheck then return true end
     if not targetPart or not targetPart.Parent then return false end
@@ -493,7 +526,6 @@ local function CreateButton(parent, text, callback)
     return btn
 end
 
--- Dropdown con reutilización de elementos
 local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback)
     local btn = CreateButton(parent, text .. " ▼", function() end)
     
@@ -569,7 +601,6 @@ CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", false, function(stat
     Lighting.GlobalShadows = not state
 end)
 
--- BoostFPS sin congelamientos y con restauración completa
 CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, function(state)
     if state then
         task.spawn(function()
@@ -800,7 +831,6 @@ Tabs["Aimbot"].Indicator.Visible = true
 Tabs["Aimbot"].Frame.Visible = true
 activeTab = Tabs["Aimbot"]
 
--- Control de arrastre UI optimizado
 local dragToggle, dragStart, startPos
 table.insert(Connections, mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = true; dragStart = input.Position; startPos = mainFrame.Position end
@@ -821,7 +851,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 end))
 
 -- ==========================================
--- 7. BUCLE PRINCIPAL Y ESP (Con Skeleton Operativo)
+-- 7. BUCLE PRINCIPAL Y ESP (Con Target HUD y Skeleton)
 -- ==========================================
 if hasDrawing then
     _G.HkFovCircle = Drawing.new("Circle")
@@ -861,7 +891,6 @@ local function ClearESP(esp)
     if esp.Skeleton then for _, line in pairs(esp.Skeleton) do if line then line.Visible = false end end end
 end
 
--- Limpieza de caché cuando un jugador abandona y desconexión de CharacterAdded
 table.insert(Connections, Players.PlayerRemoving:Connect(function(player)
     if _G.HkDrawingCache[player] then
         local esp = _G.HkDrawingCache[player]
@@ -911,6 +940,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 
     local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(time() % 3 / 3, 0.8, 1) or ThemeColor
     mainStroke.Color = activeColor
+    targetHudStroke.Color = activeColor
     
     local mousePos = UserInputService:GetMouseLocation()
     if hasDrawing and _G.HkFovCircle then
@@ -921,6 +951,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 
     local shortestDist = Config.Aimbot.FOV
     local bestTarget = nil
+    local currentTargetPlayer = nil
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -973,7 +1004,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Dist.Visible = false
                     end
 
-                    -- Skeleton ESP Operativo (R15)
                     if Config.Visuals.Skeleton and esp and esp.Skeleton then
                         local upperTorso = char:FindFirstChild("UpperTorso")
                         local lowerTorso = char:FindFirstChild("LowerTorso")
@@ -1047,6 +1077,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         if IsVisible(aimPart) then
                             shortestDist = distFromCenter
                             bestTarget = aimPart
+                            currentTargetPlayer = player
                         end
                     end
                 else
@@ -1058,7 +1089,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Aimbot con Smoothness y Predicción
+    -- Aimbot con Smoothness, Predicción y Target HUD
     if Config.Aimbot.Enabled and isAiming then
         if lockedTarget then
             local targetChar = lockedTarget.Parent
@@ -1070,9 +1101,27 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         if not lockedTarget then lockedTarget = bestTarget end
 
         if lockedTarget and lockedTarget.Parent then
+            local targetChar = lockedTarget.Parent
+            local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+            local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
+
+            -- Actualizar y mostrar Target HUD
+            if targetPlayer and targetHum then
+                targetNameLbl.Text = targetPlayer.Name
+                local healthPct = math.clamp(targetHum.Health / targetHum.MaxHealth, 0, 1)
+                targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
+                targetHealthText.Text = math.floor(targetHum.Health) .. " / " .. math.floor(targetHum.MaxHealth) .. " (" .. math.floor(healthPct * 100) .. "%)"
+                
+                -- Posicionar al lado del cursor / FOV
+                TargetHudFrame.Position = UDim2.new(0, mousePos.X + Config.Aimbot.FOV + 15, 0, mousePos.Y - 24)
+                TargetHudFrame.Visible = true
+            else
+                TargetHudFrame.Visible = false
+            end
+
             local targetPos = lockedTarget.Position
-            if Config.Aimbot.Predict and lockedTarget.Parent:FindFirstChild("HumanoidRootPart") then
-                local rootPart = lockedTarget.Parent.HumanoidRootPart
+            if Config.Aimbot.Predict and targetChar:FindFirstChild("HumanoidRootPart") then
+                local rootPart = targetChar.HumanoidRootPart
                 local dist = (lockedTarget.Position - Camera.CFrame.Position).Magnitude
                 local ping = 0
                 pcall(function() ping = LocalPlayer:GetNetworkPing() end)
@@ -1083,10 +1132,15 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
             local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
             local smoothness = math.max(1, Config.Aimbot.Smoothness)
             Camera.CFrame = (smoothness > 1) and Camera.CFrame:Lerp(targetCFrame, 1 / smoothness) or targetCFrame
+        else
+            TargetHudFrame.Visible = false
         end
+    else
+        TargetHudFrame.Visible = false
+        lockedTarget = nil
     end
 
-    -- TriggerBot Eficiente (Raycasting de precisión)
+    -- TriggerBot Eficiente
     if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot and hasMouseClick then
         if tick() - LastTriggerTick >= Config.Aimbot.TriggerDelay then
             local unitRay = Camera:ScreenPointToRay(mousePos.X, mousePos.Y)
