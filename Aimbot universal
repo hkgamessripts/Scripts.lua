@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.5 (Fully Fixed & Enhanced: FOV Circle, Korblox, Target Switch, Smooth Aimbot, Slider Knobs & Notifications)
+    HKSTUDIO ELITE HUB - V5.6 (Professional Edition)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -26,6 +26,7 @@ local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 local Config = {
     Aimbot = { 
         Enabled = false, 
+        DrawFOV = true,
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
@@ -163,7 +164,7 @@ local function Notify(title, text)
     end)
 end
 
--- Target Info HUD (Objetivo fijado)
+-- Target Info HUD
 local TargetHudFrame = Instance.new("Frame", hkGui)
 TargetHudFrame.Size = UDim2.new(0, 180, 0, 46)
 TargetHudFrame.Position = UDim2.new(0.5, -90, 0.62, 0)
@@ -239,7 +240,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     frameAccumulator = frameAccumulator + dt
     frameCount = frameCount + 1
     
-    -- Modo Arcoíris Global
     if Config.Visuals.Rainbow then
         local hue = (tick() % 6) / 6
         CurrentThemeColor = Color3.fromHSV(hue, 1, 1)
@@ -253,9 +253,8 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
         if fovCircle then fovCircle.Color = CurrentThemeColor end
     end
 
-    -- Actualización de FOV Circle
     if fovCircle then
-        if Config.Aimbot.Enabled then
+        if Config.Aimbot.Enabled and Config.Aimbot.DrawFOV then
             fovCircle.Visible = true
             fovCircle.Radius = Config.Aimbot.FOV
             fovCircle.Position = UserInputService:GetMouseLocation()
@@ -549,7 +548,6 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
     fill.BackgroundColor3 = CurrentThemeColor
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
-    -- Bolita (Knob) en la barra de slider
     local knob = Instance.new("Frame", track)
     knob.Size = UDim2.new(0, 12, 0, 12)
     knob.Position = UDim2.new(pct, -6, 0.5, -6)
@@ -626,44 +624,35 @@ local tabSettings = CreateTab("⚙️", "Settings")
 
 -- Aimbot Tab
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
+CreateToggle(tabAimbot, "Draw FOV", "Aimbot", "DrawFOV", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
 
+local targetPartsList = {"Head", "HumanoidRootPart", "UpperTorso"}
+local targetIndex = 1
 local targetBtn = CreateButton(tabAimbot, "Target: " .. Config.Aimbot.TargetPart, function()
-    Config.Aimbot.TargetPart = Config.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head"
+    targetIndex = targetIndex % #targetPartsList + 1
+    Config.Aimbot.TargetPart = targetPartsList[targetIndex]
     targetBtn.Text = "Target: " .. Config.Aimbot.TargetPart
-    Notify("Aimbot", "Objetivo cambiado a " .. Config.Aimbot.TargetPart)
+    Notify("Aimbot", "Target cambiado a " .. Config.Aimbot.TargetPart)
 end)
 
 CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 1, 10)
 CreateSlider(tabAimbot, "FOV Radius", "Aimbot", "FOV", 50, 600)
 
 -- Visuals Tab
-CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", true, function(state)
-    Notify("Visuals", "Chams " .. (state and "activado" or "desactivado"))
-end)
-CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", true, function(state)
-    Notify("Visuals", "Bone Skeleton " .. (state and "activado" or "desactivado"))
-end)
-CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", true, function(state)
-    Notify("Visuals", "Box ESP " .. (state and "activado" or "desactivado"))
-end)
-CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", true, function(state)
-    Notify("Visuals", "Tracers " .. (state and "activado" or "desactivado"))
-end)
-CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", true, function(state)
-    Notify("Visuals", "Distance & Info " .. (state and "activado" or "desactivado"))
-end)
-CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", true, function(state)
-    Notify("Visuals", "Rainbow Mode " .. (state and "activado" or "desactivado"))
-end)
+CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", true)
+CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", true)
+CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", true)
+CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", true)
+CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", true)
+CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", true)
 
 -- Local Tab
 CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", true, function(state)
     Lighting.Ambient = state and Color3.new(1, 1, 1) or OriginalLighting.Ambient
     Lighting.Brightness = state and 2 or OriginalLighting.Brightness
     Lighting.GlobalShadows = not state
-    Notify("Local", "Fullbright " .. (state and "activado" or "desactivado"))
 end)
 
 CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, function(state)
@@ -685,7 +674,6 @@ CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, fun
                 count = count + 1
                 if count % 600 == 0 then task.wait() end
             end
-            Notify("Optimizador", "BoostFPS activado.")
         end)
     else
         task.spawn(function()
@@ -706,13 +694,11 @@ CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, fun
                 if tex and tex.Parent then tex.Transparency = trans end
             end
             table.clear(OriginalTextureTransparencies)
-            Notify("Optimizador", "BoostFPS desactivado.")
         end)
     end
 end)
 
--- Korblox corregido para R15 y R6
-CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", true, function(state)
+local function ApplyKorblox(state)
     local char = LocalPlayer.Character
     if not char then return end
     local legParts = {"RightUpperLeg", "RightLowerLeg", "RightFoot", "RightLeg"}
@@ -720,15 +706,29 @@ CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", true, function(st
         local p = char:FindFirstChild(pName)
         if p then
             if state then
-                OriginalTransparencies[pName] = p.Transparency
+                if OriginalTransparencies[pName] == nil then
+                    OriginalTransparencies[pName] = p.Transparency
+                end
                 p.Transparency = 1
             else
-                p.Transparency = OriginalTransparencies[pName] or 0
+                if OriginalTransparencies[pName] then
+                    p.Transparency = OriginalTransparencies[pName]
+                end
             end
         end
     end
-    Notify("Local", "Fake Korblox " .. (state and "activado" or "desactivado"))
+end
+
+CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", true, function(state)
+    ApplyKorblox(state)
 end)
+
+table.insert(Connections, LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(0.6)
+    if Config.Local.FakeKorblox then
+        ApplyKorblox(true)
+    end
+end))
 
 CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", true, function(state)
     local char = LocalPlayer.Character
@@ -749,7 +749,6 @@ CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", true, function(
             if face then face.Transparency = OriginalTransparencies["Face"] or 0 end
         end
     end
-    Notify("Local", "Fake Headless " .. (state and "activado" or "desactivado"))
 end)
 
 CreateDropdown(tabLocal, "Teleport a Jugador", 
@@ -817,25 +816,37 @@ CreateToggle(tabSettings, "Anti-AFK", "Settings", "AntiAFK", true, function(stat
     end
 end)
 
--- Botón renombrado a "Unlink"
+-- Botón Unlink con limpieza absoluta y rigurosa
 CreateButton(tabSettings, "Unlink", function()
     Unloaded = true
+    
+    -- Destruir FOV circle
     if fovCircle then pcall(function() fovCircle:Remove() end) end
+
+    -- Desconectar conexiones
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
     end
     table.clear(Connections)
     
-    for _, esp in pairs(EspCache) do
+    -- Limpiar ESP y Chams en todos los jugadores
+    for player, esp in pairs(EspCache) do
         pcall(function()
-            esp.Box:Remove()
-            esp.Tracer:Remove()
-            esp.Info:Remove()
-            for _, bone in ipairs(esp.Bones) do bone:Remove() end
+            if esp.Box then esp.Box:Remove() end
+            if esp.Tracer then esp.Tracer:Remove() end
+            if esp.Info then esp.Info:Remove() end
+            if esp.Bones then
+                for _, bone in ipairs(esp.Bones) do bone:Remove() end
+            end
         end)
+        if player.Character then
+            local hl = player.Character:FindFirstChild("HkChamsHighlight")
+            if hl then hl:Destroy() end
+        end
     end
     table.clear(EspCache)
 
+    -- Restaurar iluminación y mapa
     pcall(function()
         Lighting.Ambient = OriginalLighting.Ambient
         Lighting.Brightness = OriginalLighting.Brightness
@@ -843,6 +854,35 @@ CreateButton(tabSettings, "Unlink", function()
         Lighting.FogEnd = OriginalLighting.FogEnd
     end)
 
+    for part, mat in pairs(OriginalMaterials) do
+        if part and part.Parent then part.Material = mat end
+    end
+    table.clear(OriginalMaterials)
+
+    for decal, trans in pairs(OriginalDecalTransparencies) do
+        if decal and decal.Parent then decal.Transparency = trans end
+    end
+    table.clear(OriginalDecalTransparencies)
+
+    for tex, trans in pairs(OriginalTextureTransparencies) do
+        if tex and tex.Parent then tex.Transparency = trans end
+    end
+    table.clear(OriginalTextureTransparencies)
+
+    -- Restaurar personaje local si tenía Korblox/Headless
+    if LocalPlayer.Character then
+        for pName, trans in pairs(OriginalTransparencies) do
+            local p = LocalPlayer.Character:FindFirstChild(pName)
+            if p then p.Transparency = trans end
+        end
+        local head = LocalPlayer.Character:FindFirstChild("Head")
+        if head then
+            local face = head:FindFirstChild("face")
+            if face and OriginalTransparencies["Face"] then face.Transparency = OriginalTransparencies["Face"] end
+        end
+    end
+
+    -- Destruir GUI principal
     pcall(function() hkGui:Destroy() end)
 end)
 
@@ -1043,7 +1083,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT (Con Suavidad Optimizada)
+-- 7. MOTOR DE AIMBOT (Suavizado Dinámico)
 -- ==========================================
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if not Config.Aimbot.Enabled then
@@ -1095,7 +1135,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
         local currentCFrame = Camera.CFrame
         local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
         
-        -- Suavidad fluida y optimizada basada en delta time
         local smoothness = math.clamp(Config.Aimbot.Smoothness, 1, 10)
         local alpha = math.clamp(dt * (11 - smoothness) * 6, 0.05, 1)
         Camera.CFrame = currentCFrame:Lerp(targetCFrame, alpha)
