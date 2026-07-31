@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.4 (Fully Restored: Aimbot, Visuals & Complete Settings / Config System)
+    HKSTUDIO ELITE HUB - V5.5 (Fully Fixed & Enhanced: FOV Circle, Korblox, Target Switch, Smooth Aimbot, Slider Knobs & Notifications)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -19,7 +19,6 @@ local Camera = workspace.CurrentCamera
 -- ==========================================
 local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
 local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
-local hasMouseClick = (mouse1click ~= nil and type(mouse1click) == "function")
 
 -- ==========================================
 -- 1. CONFIGURACIÓN Y CACHÉ GLOBAL
@@ -30,7 +29,7 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
-        Smoothness = 5, 
+        Smoothness = 4, 
         FOV = 150
     },
     Visuals = { 
@@ -65,6 +64,16 @@ local Connections = {}
 local EspCache = {}
 local Unloaded = false
 local CooldownTable = {}
+
+-- Caché de FOV Circle (Drawing API)
+local fovCircle = hasDrawing and Drawing.new("Circle") or nil
+if fovCircle then
+    fovCircle.Visible = false
+    fovCircle.Filled = false
+    fovCircle.Thickness = 1.5
+    fovCircle.Color = CurrentThemeColor
+    fovCircle.NumSides = 64
+end
 
 -- Cachés de mapa y rendimiento
 local OriginalLighting = {
@@ -204,7 +213,7 @@ local function CheckCooldown(actionName, cooldownTime)
 end
 
 -- ==========================================
--- 3. HUD SUPERIOR Y VERIFICACIONES
+-- 3. HUD SUPERIOR Y RENDERIZADO GLOBAL
 -- ==========================================
 local topHud = Instance.new("Frame", hkGui)
 topHud.Size = UDim2.new(0, 230, 0, 26)
@@ -236,10 +245,23 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
         CurrentThemeColor = Color3.fromHSV(hue, 1, 1)
         topStroke.Color = CurrentThemeColor
         targetHudStroke.Color = CurrentThemeColor
+        if fovCircle then fovCircle.Color = CurrentThemeColor end
     else
         CurrentThemeColor = BaseThemeColor
         topStroke.Color = CurrentThemeColor
         targetHudStroke.Color = CurrentThemeColor
+        if fovCircle then fovCircle.Color = CurrentThemeColor end
+    end
+
+    -- Actualización de FOV Circle
+    if fovCircle then
+        if Config.Aimbot.Enabled then
+            fovCircle.Visible = true
+            fovCircle.Radius = Config.Aimbot.FOV
+            fovCircle.Position = UserInputService:GetMouseLocation()
+        else
+            fovCircle.Visible = false
+        end
     end
 
     if frameAccumulator >= 1 then
@@ -451,13 +473,14 @@ local function CreateToggle(parent, text, configCat, configKey, isMasterAction, 
         TweenService:Create(knob, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)}):Play()
         
         if isMasterAction then
-            Notify("HkStudio", text .. (state and " activado" or " desactivado"))
+            local actionText = state and "activado" or "desactivado"
+            Notify("HkStudio", text .. " " .. actionText)
         end
         if customCallback then customCallback(state) end
     end)
 end
 
--- Slider Global
+-- Slider Global con "bolita" (knob)
 local ActiveSlider = nil
 table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
     if ActiveSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -465,6 +488,7 @@ table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
         local min = ActiveSlider.Min
         local max = ActiveSlider.Max
         local fill = ActiveSlider.Fill
+        local knob = ActiveSlider.Knob
         local valLbl = ActiveSlider.ValLbl
         local cat = ActiveSlider.Cat
         local key = ActiveSlider.Key
@@ -473,6 +497,8 @@ table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
         local rel = math.clamp(mx - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
         local pctNum = rel / track.AbsoluteSize.X
         fill.Size = UDim2.new(pctNum, 0, 1, 0)
+        knob.Position = UDim2.new(pctNum, -6, 0.5, -6)
+        
         local value = math.floor(min + (pctNum * (max - min)))
         Config[cat][key] = value
         valLbl.Text = tostring(value)
@@ -511,20 +537,27 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
     valLbl.Text = tostring(Config[configCat][configKey])
 
     local track = Instance.new("TextButton", base)
-    track.Size = UDim2.new(1, -24, 0, 5)
+    track.Size = UDim2.new(1, -24, 0, 6)
     track.Position = UDim2.new(0, 12, 0, 30)
     track.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
     track.Text = ""
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
     
     local fill = Instance.new("Frame", track)
-    local pct = (Config[configCat][configKey] - min) / (max - min)
+    local pct = math.clamp((Config[configCat][configKey] - min) / (max - min), 0, 1)
     fill.Size = UDim2.new(pct, 0, 1, 0)
     fill.BackgroundColor3 = CurrentThemeColor
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
+    -- Bolita (Knob) en la barra de slider
+    local knob = Instance.new("Frame", track)
+    knob.Size = UDim2.new(0, 12, 0, 12)
+    knob.Position = UDim2.new(pct, -6, 0.5, -6)
+    knob.BackgroundColor3 = TextWhite
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
     track.MouseButton1Down:Connect(function()
-        ActiveSlider = {Track = track, Min = min, Max = max, Fill = fill, ValLbl = valLbl, Cat = configCat, Key = configKey}
+        ActiveSlider = {Track = track, Min = min, Max = max, Fill = fill, Knob = knob, ValLbl = valLbl, Cat = configCat, Key = configKey}
     end)
 end
 
@@ -595,25 +628,42 @@ local tabSettings = CreateTab("⚙️", "Settings")
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
-CreateButton(tabAimbot, "Target: Head", function()
+
+local targetBtn = CreateButton(tabAimbot, "Target: " .. Config.Aimbot.TargetPart, function()
     Config.Aimbot.TargetPart = Config.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head"
+    targetBtn.Text = "Target: " .. Config.Aimbot.TargetPart
+    Notify("Aimbot", "Objetivo cambiado a " .. Config.Aimbot.TargetPart)
 end)
+
 CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 1, 10)
 CreateSlider(tabAimbot, "FOV Radius", "Aimbot", "FOV", 50, 600)
 
 -- Visuals Tab
-CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", false)
-CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", false)
-CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", false)
-CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", false)
-CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", false)
-CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", false)
+CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", true, function(state)
+    Notify("Visuals", "Chams " .. (state and "activado" or "desactivado"))
+end)
+CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", true, function(state)
+    Notify("Visuals", "Bone Skeleton " .. (state and "activado" or "desactivado"))
+end)
+CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", true, function(state)
+    Notify("Visuals", "Box ESP " .. (state and "activado" or "desactivado"))
+end)
+CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", true, function(state)
+    Notify("Visuals", "Tracers " .. (state and "activado" or "desactivado"))
+end)
+CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", true, function(state)
+    Notify("Visuals", "Distance & Info " .. (state and "activado" or "desactivado"))
+end)
+CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", true, function(state)
+    Notify("Visuals", "Rainbow Mode " .. (state and "activado" or "desactivado"))
+end)
 
 -- Local Tab
-CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", false, function(state)
+CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", true, function(state)
     Lighting.Ambient = state and Color3.new(1, 1, 1) or OriginalLighting.Ambient
     Lighting.Brightness = state and 2 or OriginalLighting.Brightness
     Lighting.GlobalShadows = not state
+    Notify("Local", "Fullbright " .. (state and "activado" or "desactivado"))
 end)
 
 CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, function(state)
@@ -635,7 +685,7 @@ CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, fun
                 count = count + 1
                 if count % 600 == 0 then task.wait() end
             end
-            Notify("Optimizador", "BoostFPS aplicado.")
+            Notify("Optimizador", "BoostFPS activado.")
         end)
     else
         task.spawn(function()
@@ -656,28 +706,31 @@ CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, fun
                 if tex and tex.Parent then tex.Transparency = trans end
             end
             table.clear(OriginalTextureTransparencies)
-            Notify("Optimizador", "BoostFPS restaurado.")
+            Notify("Optimizador", "BoostFPS desactivado.")
         end)
     end
 end)
 
-CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", false, function(state)
+-- Korblox corregido para R15 y R6
+CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", true, function(state)
     local char = LocalPlayer.Character
     if not char then return end
-    for _, pName in ipairs({"RightUpperLeg", "RightLowerLeg", "RightFoot"}) do
+    local legParts = {"RightUpperLeg", "RightLowerLeg", "RightFoot", "RightLeg"}
+    for _, pName in ipairs(legParts) do
         local p = char:FindFirstChild(pName)
         if p then
             if state then
                 OriginalTransparencies[pName] = p.Transparency
                 p.Transparency = 1
             else
-                if OriginalTransparencies[pName] then p.Transparency = OriginalTransparencies[pName] end
+                p.Transparency = OriginalTransparencies[pName] or 0
             end
         end
     end
+    Notify("Local", "Fake Korblox " .. (state and "activado" or "desactivado"))
 end)
 
-CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", false, function(state)
+CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", true, function(state)
     local char = LocalPlayer.Character
     if not char then return end
     local head = char:FindFirstChild("Head")
@@ -696,6 +749,7 @@ CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", false, function
             if face then face.Transparency = OriginalTransparencies["Face"] or 0 end
         end
     end
+    Notify("Local", "Fake Headless " .. (state and "activado" or "desactivado"))
 end)
 
 CreateDropdown(tabLocal, "Teleport a Jugador", 
@@ -721,10 +775,10 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     end
 )
 
--- Settings Tab (Restauradas las opciones de Save, Load, Unload / Unlink y Anti-AFK)
+-- Settings Tab
 CreateButton(tabSettings, "Guardar Config", function()
     if not hasFileAPI then Notify("Settings", "File API no disponible.") return end
-    local success, err = pcall(function()
+    local success = pcall(function()
         local data = HttpService:JSONEncode(Config)
         writefile("HkStudioConfig.json", data)
     end)
@@ -733,7 +787,7 @@ end)
 
 CreateButton(tabSettings, "Cargar Config", function()
     if not hasFileAPI or not isfile("HkStudioConfig.json") then Notify("Settings", "No hay configuración guardada.") return end
-    local success, err = pcall(function()
+    local success = pcall(function()
         local data = readfile("HkStudioConfig.json")
         local decoded = HttpService:JSONDecode(data)
         for cat, v in pairs(decoded) do
@@ -763,8 +817,10 @@ CreateToggle(tabSettings, "Anti-AFK", "Settings", "AntiAFK", true, function(stat
     end
 end)
 
-CreateButton(tabSettings, "Unload / Unlink Hub", function()
+-- Botón renombrado a "Unlink"
+CreateButton(tabSettings, "Unlink", function()
     Unloaded = true
+    if fovCircle then pcall(function() fovCircle:Remove() end) end
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
     end
@@ -987,9 +1043,9 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT
+-- 7. MOTOR DE AIMBOT (Con Suavidad Optimizada)
 -- ==========================================
-table.insert(Connections, RunService.RenderStepped:Connect(function()
+table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if not Config.Aimbot.Enabled then
         TargetHudFrame.Visible = false
         return
@@ -1039,8 +1095,10 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         local currentCFrame = Camera.CFrame
         local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
         
+        -- Suavidad fluida y optimizada basada en delta time
         local smoothness = math.clamp(Config.Aimbot.Smoothness, 1, 10)
-        Camera.CFrame = currentCFrame:Lerp(targetCFrame, 1 / smoothness)
+        local alpha = math.clamp(dt * (11 - smoothness) * 6, 0.05, 1)
+        Camera.CFrame = currentCFrame:Lerp(targetCFrame, alpha)
     else
         TargetHudFrame.Visible = false
     end
