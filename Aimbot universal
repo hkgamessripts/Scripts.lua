@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.6 (Professional Edition)
+    HKSTUDIO ELITE HUB - V5.7 (Professional Edition)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -21,7 +21,7 @@ local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
 local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 
 -- ==========================================
--- 1. CONFIGURACIÓN Y CACHÉ GLOBAL
+-- 1. CONFIGURACIÓN Y CACHÉ GLOBAL (Smoothness por defecto en 0)
 -- ==========================================
 local Config = {
     Aimbot = { 
@@ -30,7 +30,7 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
-        Smoothness = 4, 
+        Smoothness = 0, -- Sin suavidad por defecto (cero delay)
         FOV = 150
     },
     Visuals = { 
@@ -622,7 +622,7 @@ local tabVisuals = CreateTab("👁️", "Visuals")
 local tabLocal = CreateTab("🏃", "Local")
 local tabSettings = CreateTab("⚙️", "Settings")
 
--- Aimbot Tab
+-- Aimbot Tab (Slider de Smoothness empieza en 0 ahora)
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
 CreateToggle(tabAimbot, "Draw FOV", "Aimbot", "DrawFOV", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
@@ -637,7 +637,7 @@ local targetBtn = CreateButton(tabAimbot, "Target: " .. Config.Aimbot.TargetPart
     Notify("Aimbot", "Target cambiado a " .. Config.Aimbot.TargetPart)
 end)
 
-CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 1, 10)
+CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 0, 10)
 CreateSlider(tabAimbot, "FOV Radius", "Aimbot", "FOV", 50, 600)
 
 -- Visuals Tab
@@ -1083,7 +1083,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT (Suavizado Dinámico)
+-- 7. MOTOR DE AIMBOT (Con Smoothness 0 por defecto = Cero retraso)
 -- ==========================================
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if not Config.Aimbot.Enabled then
@@ -1135,9 +1135,13 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
         local currentCFrame = Camera.CFrame
         local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
         
-        local smoothness = math.clamp(Config.Aimbot.Smoothness, 1, 10)
-        local alpha = math.clamp(dt * (11 - smoothness) * 6, 0.05, 1)
-        Camera.CFrame = currentCFrame:Lerp(targetCFrame, alpha)
+        local smoothness = math.clamp(Config.Aimbot.Smoothness, 0, 10)
+        if smoothness == 0 then
+            Camera.CFrame = targetCFrame
+        else
+            local alpha = math.clamp(dt * (11 - smoothness) * 6, 0.05, 1)
+            Camera.CFrame = currentCFrame:Lerp(targetCFrame, alpha)
+        end
     else
         TargetHudFrame.Visible = false
     end
