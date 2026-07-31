@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V7.7 (Production Build + All Features Restored)
+    HKSTUDIO ELITE HUB - V7.8 (Production Build + FPS/MS + Movable Top HUD Restored)
 ]]
 
 local Players = game:GetService("Players")
@@ -10,6 +10,7 @@ local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
+local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -40,7 +41,8 @@ local Config = {
         Box = false, 
         Tracers = false, 
         Info = false, 
-        Rainbow = false 
+        Rainbow = false,
+        ShowStatsHud = true
     },
     Local = { 
         Fullbright = false, 
@@ -52,7 +54,8 @@ local Config = {
     },
     Settings = { 
         Keybind = Enum.KeyCode.RightShift,
-        UIPosition = {X = 0.5, XOffset = -325, Y = 0.5, YOffset = -200}
+        UIPosition = {X = 0.5, XOffset = -325, Y = 0.5, YOffset = -200},
+        TopHudPosition = {X = 0.5, XOffset = -90, Y = 0, YOffset = 10}
     }
 }
 
@@ -319,7 +322,7 @@ table.insert(Connections, Players.PlayerRemoving:Connect(function(p)
 end))
 
 -- ==========================================
--- 4. INTERFAZ GRÁFICA
+-- 4. INTERFAZ GRÁFICA & TOP STATS HUD MOVIBLE
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -328,6 +331,7 @@ hkGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() hkGui.Parent = CoreGui end)
 if not hkGui.Parent then hkGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
+-- Notificaciones
 local NotifyContainer = Instance.new("Frame", hkGui)
 NotifyContainer.Size = UDim2.new(0, 250, 1, -20)
 NotifyContainer.Position = UDim2.new(1, -260, 0, 10)
@@ -390,6 +394,40 @@ local function Notify(title, text)
     end)
 end
 
+-- Top Stats HUD (FPS, MS / Ping) - Movible
+local TopStatsHud = Instance.new("Frame", hkGui)
+TopStatsHud.Size = UDim2.new(0, 180, 0, 32)
+TopStatsHud.Position = UDim2.new(Config.Settings.TopHudPosition.X, Config.Settings.TopHudPosition.XOffset, Config.Settings.TopHudPosition.Y, Config.Settings.TopHudPosition.YOffset)
+TopStatsHud.BackgroundColor3 = BgDark
+TopStatsHud.ZIndex = 4
+Instance.new("UICorner", TopStatsHud).CornerRadius = UDim.new(0, 6)
+local topHudStroke = Instance.new("UIStroke", TopStatsHud)
+topHudStroke.Color = ThemeColor
+topHudStroke.Thickness = 1
+
+local topHudLabel = Instance.new("TextLabel", TopStatsHud)
+topHudLabel.Size = UDim2.new(1, 0, 1, 0)
+topHudLabel.BackgroundTransparency = 1
+topHudLabel.TextColor3 = TextWhite
+topHudLabel.Font = Enum.Font.GothamBold
+topHudLabel.TextSize = 12
+topHudLabel.Text = "FPS: 60 | MS: 0ms"
+topHudLabel.ZIndex = 5
+
+-- Arrastre del Top Stats HUD
+local topDragToggle, topDragStart, topStartPos
+table.insert(Connections, TopStatsHud.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = true; topDragStart = input.Position; topStartPos = TopStatsHud.Position end
+end))
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if topDragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - topDragStart
+        TopStatsHud.Position = UDim2.new(topStartPos.X.Scale, topStartPos.X.Offset + delta.X, topStartPos.Y.Scale, topStartPos.Y.Offset + delta.Y)
+    end
+end))
+table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = false end end))
+
+-- Target HUD (Al apuntar a un jugador)
 local TargetHudFrame = Instance.new("Frame", hkGui)
 TargetHudFrame.Size = UDim2.new(0, 170, 0, 48)
 TargetHudFrame.BackgroundColor3 = BgDark
@@ -539,7 +577,7 @@ local function IsVisible(targetPart, player)
 end
 
 -- ==========================================
--- 6. CONSTRUCCIÓN DE UI
+-- 6. CONSTRUCCIÓN DE UI (MENÚ PRINCIPAL)
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
 mainFrame.Size = UDim2.new(0, 650, 0, 400)
@@ -708,8 +746,11 @@ CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", false)
 CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", false)
 CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", false)
 CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", false)
+CreateToggle(tabVisuals, "Top Stats HUD", "Visuals", "ShowStatsHud", true, function(state)
+    TopStatsHud.Visible = state
+end)
 
--- Local (Restaurados Fullbright, Noclip, AFK, Korblox, Headless)
+-- Local
 CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", false, function(state)
     Lighting.Ambient = state and Color3.new(1, 1, 1) or OriginalLighting.Ambient
     Lighting.Brightness = state and 2 or OriginalLighting.Brightness
@@ -820,7 +861,7 @@ CreateToggle(tabLocal, "BoostFPS (Engine Optimization)", "Local", "BoostFPS", tr
     end
 end)
 
--- Settings (Restaurados Save & Load Config)
+-- Settings
 CreateButton(tabSettings, "Save Config", function()
     if SaveConfiguration() then
         Notify("Config", "Configuración guardada exitosamente.")
@@ -864,7 +905,7 @@ Tabs["Aimbot"].Indicator.Visible = true
 Tabs["Aimbot"].Frame.Visible = true
 activeTab = Tabs["Aimbot"]
 
--- Arrastre de UI
+-- Arrastre de UI Principal
 local dragToggle, dragStart, startPos
 table.insert(Connections, mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = true; dragStart = input.Position; startPos = mainFrame.Position end
@@ -884,7 +925,7 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gp
 end))
 
 -- ==========================================
--- 8. DRAWING PIPELINE Y BUCLES PRINCIPALES
+-- 8. DRAWING PIPELINE, FPS/MS & BUCLES
 -- ==========================================
 if hasDrawing then
     _G.HkFovCircle = Drawing.new("Circle")
@@ -931,11 +972,35 @@ local currentBestTargetPart = nil
 table.insert(Connections, UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
 table.insert(Connections, UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false; lockedTargetPart = nil end end))
 
+-- Variables de FPS y MS
+local frameCount = 0
+local fpsTimer = 0
+local currentFPS = 60
+local currentPing = 0
+
 -- ----------------------------------------------------
--- THREAD A: HEARTBEAT (ESP & Sincronización optimizada)
+-- THREAD A: HEARTBEAT (ESP, FPS/MS & Sincronización)
 -- ----------------------------------------------------
-table.insert(Connections, RunService.Heartbeat:Connect(function()
+table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
     if Unloaded then return end
+
+    -- Calcular FPS y Ping real
+    frameCount = frameCount + 1
+    fpsTimer = fpsTimer + dt
+    if fpsTimer >= 0.5 then
+        currentFPS = math.floor(frameCount / fpsTimer)
+        frameCount = 0
+        fpsTimer = 0
+        
+        pcall(function()
+            currentPing = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0)
+        end)
+        
+        if Config.Visuals.ShowStatsHud then
+            topHudLabel.Text = string.Format("FPS: %d | MS: %dms", currentFPS, currentPing)
+        end
+    end
+    TopStatsHud.Visible = Config.Visuals.ShowStatsHud
 
     if #ActivePlayersList ~= #Players:GetPlayers() then
         RefreshActivePlayersList()
