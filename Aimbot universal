@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V7.9 (Production Build + Classic HkStudio Stats Box Restored)
+    HKSTUDIO ELITE HUB - V8.1 (Aimbot V5.2 Hard-Lock Restored + Classic Stats HUD)
 ]]
 
 local Players = game:GetService("Players")
@@ -15,6 +15,15 @@ local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+-- Caché de funciones nativas para máximo rendimiento
+local math_floor = math.floor
+local math_abs = math.abs
+local math_clamp = math.clamp
+local string_format = string.format
+local table_insert = table.insert
+local table_clear = table.clear
+local os_clock = os.clock
+
 local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
 local hasMouseClick = (mouse1click ~= nil and type(mouse1click) == "function")
 local hasFileOps = (writefile ~= nil and readfile ~= nil)
@@ -28,7 +37,6 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
-        Smoothness = 3, 
         Predict = false, 
         FOV = 150, 
         TriggerBot = false,
@@ -63,28 +71,19 @@ local CONFIG_FILENAME = "HkStudio_Config.json"
 
 local function SaveConfiguration()
     if not hasFileOps then return false end
-    local success, encoded = pcall(function()
-        return HttpService:JSONEncode(Config)
-    end)
-    if success then
-        writefile(CONFIG_FILENAME, encoded)
-        return true
-    end
+    local success, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
+    if success then writefile(CONFIG_FILENAME, encoded); return true end
     return false
 end
 
 local function LoadConfiguration()
     if not hasFileOps or not isfile or not isfile(CONFIG_FILENAME) then return false end
-    local success, decoded = pcall(function()
-        return HttpService:JSONDecode(readfile(CONFIG_FILENAME))
-    end)
+    local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILENAME)) end)
     if success and type(decoded) == "table" then
         for cat, vals in pairs(decoded) do
             if Config[cat] and type(vals) == "table" then
                 for k, v in pairs(vals) do
-                    if Config[cat][k] ~= nil then
-                        Config[cat][k] = v
-                    end
+                    if Config[cat][k] ~= nil then Config[cat][k] = v end
                 end
             end
         end
@@ -106,7 +105,7 @@ local BgLight = Color3.fromRGB(22, 22, 28)
 local TextWhite = Color3.fromRGB(230, 230, 230)
 
 -- ==========================================
--- 2. CACHÉS Y SISTEMAS DE AISLAMIENTO
+-- 2. GESTIÓN DE CACHÉ Y ESTADOS
 -- ==========================================
 local Connections = {}
 local PlayerConnections = {}
@@ -132,8 +131,6 @@ TriggerBotRaycastParams.IgnoreWater = true
 local CharacterCache = setmetatable({}, {__mode = "k"})
 local VisibilityTimeCache = {}
 local VisibilityResultCache = {}
-
-local CurrentFrameId = 0
 local VisibilityFrameCache = {}
 
 local OriginalLighting = {
@@ -143,44 +140,34 @@ local OriginalLighting = {
 }
 
 local function RefreshActivePlayersList()
-    table.clear(ActivePlayersList)
+    table_clear(ActivePlayersList)
     for _, p in ipairs(Players:GetPlayers()) do
-        table.insert(ActivePlayersList, p)
+        table_insert(ActivePlayersList, p)
     end
 end
 
 -- ==========================================
--- 3. GESTIÓN DINÁMICA DE PERSONAJES
+-- 3. CICLO DE VIDA DE PERSONAJES
 -- ==========================================
 local function CleanupPlayerConnections(player)
     if PlayerConnections[player] then
         for _, conn in ipairs(PlayerConnections[player]) do
             pcall(function() conn:Disconnect() end)
         end
-        table.clear(PlayerConnections[player])
+        table_clear(PlayerConnections[player])
     else
         PlayerConnections[player] = {}
     end
 
     local cacheData = CharacterCache[player]
-    if cacheData then
-        if cacheData.Chams then
-            pcall(function() cacheData.Chams:Destroy() end)
-            cacheData.Chams = nil
-        end
-        if cacheData.Character then
-            for _, child in ipairs(cacheData.Character:GetChildren()) do
-                if child.Name == "HkChams" and child:IsA("Highlight") then
-                    pcall(function() child:Destroy() end)
-                end
-            end
-        end
+    if cacheData and cacheData.Chams then
+        pcall(function() cacheData.Chams:Destroy() end)
+        cacheData.Chams = nil
     end
 end
 
 local function ApplyLocalModifications(char)
     if not char then return end
-    
     local head = char:FindFirstChild("Head")
     if head then
         head.Transparency = Config.Local.FakeHeadless and 1 or 0
@@ -199,17 +186,13 @@ end
 local function BindCharacterCache(player, char)
     if not char then 
         local old = CharacterCache[player]
-        if old and old.Chams then
-            pcall(function() old.Chams:Destroy() end)
-        end
+        if old and old.Chams then pcall(function() old.Chams:Destroy() end) end
         CharacterCache[player] = nil
         return 
     end
 
     for _, child in ipairs(char:GetChildren()) do
-        if child.Name == "HkChams" and child:IsA("Highlight") then
-            pcall(function() child:Destroy() end)
-        end
+        if child.Name == "HkChams" and child:IsA("Highlight") then pcall(function() child:Destroy() end) end
     end
 
     local entry = {
@@ -217,85 +200,52 @@ local function BindCharacterCache(player, char)
         Humanoid = char:FindFirstChildOfClass("Humanoid"),
         RootPart = char:FindFirstChild("HumanoidRootPart"),
         Head = char:FindFirstChild("Head"),
-        Torso = char:FindFirstChild("Torso"),
-        UpperTorso = char:FindFirstChild("UpperTorso"),
-        LowerTorso = char:FindFirstChild("LowerTorso"),
         CurrentTool = char:FindFirstChildOfClass("Tool"),
         Chams = nil
     }
     
     CharacterCache[player] = entry
-
-    if player == LocalPlayer then
-        ApplyLocalModifications(char)
-    end
+    if player == LocalPlayer then ApplyLocalModifications(char) end
 
     local pConns = PlayerConnections[player]
-    
-    local cAdd = char.ChildAdded:Connect(function(child)
+    table_insert(pConns, char.ChildAdded:Connect(function(child)
         if child:IsA("Humanoid") then entry.Humanoid = child
         elseif child.Name == "HumanoidRootPart" then entry.RootPart = child
         elseif child.Name == "Head" then entry.Head = child
-        elseif child.Name == "Torso" then entry.Torso = child
-        elseif child.Name == "UpperTorso" then entry.UpperTorso = child
-        elseif child.Name == "LowerTorso" then entry.LowerTorso = child
         elseif child:IsA("Tool") then entry.CurrentTool = child
         elseif child.Name == "HkChams" and child:IsA("Highlight") then 
-            if entry.Chams and entry.Chams ~= child then
-                pcall(function() entry.Chams:Destroy() end)
-            end
+            if entry.Chams and entry.Chams ~= child then pcall(function() entry.Chams:Destroy() end) end
             entry.Chams = child 
         end
-        if player == LocalPlayer then
-            ApplyLocalModifications(char)
-        end
-    end)
+        if player == LocalPlayer then ApplyLocalModifications(char) end
+    end))
     
-    local cRem = char.ChildRemoved:Connect(function(child)
+    table_insert(pConns, char.ChildRemoved:Connect(function(child)
         if child == entry.CurrentTool then entry.CurrentTool = char:FindFirstChildOfClass("Tool")
-        elseif child == entry.Chams then entry.Chams = nil
-        end
-    end)
-
-    table.insert(pConns, cAdd)
-    table.insert(pConns, cRem)
+        elseif child == entry.Chams then entry.Chams = nil end
+    end))
 end
 
 local function SetupPlayerLifecycle(player)
     CleanupPlayerConnections(player)
-    
-    if player.Character then
-        BindCharacterCache(player, player.Character)
-    end
-
-    local cAdded = player.CharacterAdded:Connect(function(char)
-        BindCharacterCache(player, char)
-    end)
-    
-    local cRemoving = player.CharacterRemoving:Connect(function()
+    if player.Character then BindCharacterCache(player, player.Character) end
+    table_insert(PlayerConnections[player], player.CharacterAdded:Connect(function(char) BindCharacterCache(player, char) end))
+    table_insert(PlayerConnections[player], player.CharacterRemoving:Connect(function()
         local cacheData = CharacterCache[player]
-        if cacheData and cacheData.Chams then
-            pcall(function() cacheData.Chams:Destroy() end)
-        end
+        if cacheData and cacheData.Chams then pcall(function() cacheData.Chams:Destroy() end) end
         CharacterCache[player] = nil
-    end)
-
-    table.insert(PlayerConnections[player], cAdded)
-    table.insert(PlayerConnections[player], cRemoving)
+    end))
 end
 
-for _, p in ipairs(Players:GetPlayers()) do
-    SetupPlayerLifecycle(p)
-end
-
+for _, p in ipairs(Players:GetPlayers()) do SetupPlayerLifecycle(p) end
 RefreshActivePlayersList()
 
-table.insert(Connections, Players.PlayerAdded:Connect(function(p)
+table_insert(Connections, Players.PlayerAdded:Connect(function(p)
     RefreshActivePlayersList()
     SetupPlayerLifecycle(p)
 end))
 
-table.insert(Connections, Players.PlayerRemoving:Connect(function(p)
+table_insert(Connections, Players.PlayerRemoving:Connect(function(p)
     CleanupPlayerConnections(p)
     CharacterCache[p] = nil
     TeamCache[p] = nil
@@ -315,12 +265,11 @@ table.insert(Connections, Players.PlayerRemoving:Connect(function(p)
         end)
         _G.HkDrawingCache[p] = nil
     end
-
     RefreshActivePlayersList()
 end))
 
 -- ==========================================
--- 4. INTERFAZ GRÁFICA & CUADRO CLÁSICO DE STATS
+-- 4. INTERFAZ GRÁFICA & CUADRO CLÁSICO
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -376,7 +325,7 @@ local function Notify(title, text)
     textLbl.TextSize = 12
     textLbl.Text = text
 
-    table.insert(ActiveNotifications, notif)
+    table_insert(ActiveNotifications, notif)
     TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
     
     task.delay(3, function()
@@ -392,51 +341,60 @@ local function Notify(title, text)
     end)
 end
 
--- Cuadro Clásico HkStudio Stats (FPS y MS) - Movible
+-- ==========================================
+-- CUADRO CLÁSICO DE STATS (HkStudio | Stats)
+-- ==========================================
 local TopStatsHud = Instance.new("Frame", hkGui)
-TopStatsHud.Size = UDim2.new(0, 170, 0, 48)
+TopStatsHud.Name = "HkStudioStatsHud"
+TopStatsHud.Size = UDim2.new(0, 160, 0, 42)
 TopStatsHud.Position = UDim2.new(Config.Settings.TopHudPosition.X, Config.Settings.TopHudPosition.XOffset, Config.Settings.TopHudPosition.Y, Config.Settings.TopHudPosition.YOffset)
 TopStatsHud.BackgroundColor3 = BgDark
-TopStatsHud.ZIndex = 4
+TopStatsHud.ZIndex = 10
 Instance.new("UICorner", TopStatsHud).CornerRadius = UDim.new(0, 6)
+
 local topHudStroke = Instance.new("UIStroke", TopStatsHud)
 topHudStroke.Color = ThemeColor
 topHudStroke.Thickness = 1
 
 local topHudTitle = Instance.new("TextLabel", TopStatsHud)
-topHudTitle.Size = UDim2.new(1, -12, 0, 18)
-topHudTitle.Position = UDim2.new(0, 6, 0, 4)
+topHudTitle.Size = UDim2.new(1, -10, 0, 16)
+topHudTitle.Position = UDim2.new(0, 6, 0, 3)
 topHudTitle.BackgroundTransparency = 1
 topHudTitle.TextColor3 = ThemeColor
 topHudTitle.Font = Enum.Font.GothamBold
-topHudTitle.TextSize = 11
+topHudTitle.TextSize = 10
 topHudTitle.TextXAlignment = Enum.TextXAlignment.Left
 topHudTitle.Text = "HkStudio | Stats"
-topHudTitle.ZIndex = 5
+topHudTitle.ZIndex = 11
 
 local topHudLabel = Instance.new("TextLabel", TopStatsHud)
-topHudLabel.Size = UDim2.new(1, -12, 0, 20)
-topHudLabel.Position = UDim2.new(0, 6, 0, 22)
+topHudLabel.Size = UDim2.new(1, -10, 0, 18)
+topHudLabel.Position = UDim2.new(0, 6, 0, 20)
 topHudLabel.BackgroundTransparency = 1
 topHudLabel.TextColor3 = TextWhite
 topHudLabel.Font = Enum.Font.Gotham
-topHudLabel.TextSize = 11
+topHudLabel.TextSize = 10
 topHudLabel.TextXAlignment = Enum.TextXAlignment.Left
 topHudLabel.Text = "FPS: 60  |  MS: 0ms"
-topHudLabel.ZIndex = 5
+topHudLabel.ZIndex = 11
 
--- Arrastre del Cuadro de Stats
 local topDragToggle, topDragStart, topStartPos
-table.insert(Connections, TopStatsHud.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = true; topDragStart = input.Position; topStartPos = TopStatsHud.Position end
+table_insert(Connections, TopStatsHud.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        topDragToggle = true
+        topDragStart = input.Position
+        topStartPos = TopStatsHud.Position
+    end
 end))
-table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+table_insert(Connections, UserInputService.InputChanged:Connect(function(input)
     if topDragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - topDragStart
         TopStatsHud.Position = UDim2.new(topStartPos.X.Scale, topStartPos.X.Offset + delta.X, topStartPos.Y.Scale, topStartPos.Y.Offset + delta.Y)
     end
 end))
-table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = false end end))
+table_insert(Connections, UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = false end
+end))
 
 -- Target HUD
 local TargetHudFrame = Instance.new("Frame", hkGui)
@@ -478,10 +436,10 @@ targetHealthText.TextSize = 9
 targetHealthText.Text = "100%"
 
 -- ==========================================
--- 5. LÓGICA ESPACIAL Y WALLCHECK OPTIMIZADO
+-- 5. LÓGICA ESPACIAL Y WALLCHECK
 -- ==========================================
 local function GetPlayerTeamName(player)
-    local now = os.clock()
+    local now = os_clock()
     if TeamCache[player] and (now - (TeamCacheExpiry[player] or 0)) < 2.0 then
         return TeamCache[player]
     end
@@ -494,10 +452,7 @@ local function GetPlayerTeamName(player)
         local cacheData = CharacterCache[player]
         for _, attr in ipairs(attributes) do
             local val = player:GetAttribute(attr) or (cacheData and cacheData.Character and cacheData.Character:GetAttribute(attr))
-            if val then 
-                result = tostring(val) 
-                break 
-            end
+            if val then result = tostring(val); break end
         end
     end
 
@@ -539,13 +494,8 @@ local function IsTeammate(player)
     local myTeam = GetPlayerTeamName(LocalPlayer)
     local targetTeam = GetPlayerTeamName(player)
 
-    if myTeam and targetTeam and AreFactionsAllied(myTeam, targetTeam) then 
-        return true 
-    end
-
-    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
-        return true
-    end
+    if myTeam and targetTeam and AreFactionsAllied(myTeam, targetTeam) then return true end
+    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then return true end
 
     return false
 end
@@ -554,15 +504,11 @@ local function IsVisible(targetPart, player)
     if not Config.Aimbot.WallCheck then return true end
     if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then return false end
     
-    if VisibilityFrameCache[targetPart] ~= nil then
-        return VisibilityFrameCache[targetPart]
-    end
+    if VisibilityFrameCache[targetPart] ~= nil then return VisibilityFrameCache[targetPart] end
 
-    local now = os.clock()
+    local now = os_clock()
     if player and VisibilityTimeCache[player] and (now - VisibilityTimeCache[player]) < 0.15 then
-        if VisibilityResultCache[player] ~= nil then
-            return VisibilityResultCache[player]
-        end
+        if VisibilityResultCache[player] ~= nil then return VisibilityResultCache[player] end
     end
 
     local camPos = Camera.CFrame.Position
@@ -573,9 +519,7 @@ local function IsVisible(targetPart, player)
     local visible = true
     
     if rayResult and rayResult.Instance then
-        if not rayResult.Instance:IsDescendantOf(targetPart.Parent) then
-            visible = false
-        end
+        if not rayResult.Instance:IsDescendantOf(targetPart.Parent) then visible = false end
     end
     
     if player then
@@ -726,7 +670,7 @@ local function CreateButton(parent, text, callback)
 end
 
 -- ==========================================
--- 7. PESTAÑAS
+-- 7. PESTAÑAS DEL PANEL
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
@@ -770,12 +714,10 @@ end)
 
 CreateToggle(tabLocal, "Noclip", "Local", "Noclip", true)
 
-table.insert(Connections, RunService.Stepped:Connect(function()
+table_insert(Connections, RunService.Stepped:Connect(function()
     if Config.Local.Noclip and LocalPlayer.Character then
         for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end
 end))
@@ -790,34 +732,27 @@ CreateToggle(tabLocal, "Anti-AFK", "Local", "AFK", true, function(state)
                     Notify("Anti-AFK", "Inactividad evitada correctamente.")
                 end
             end)
-            table.insert(Connections, AFKConnection)
+            table_insert(Connections, AFKConnection)
         end
         Notify("Anti-AFK", "Activado.")
     else
-        if AFKConnection then
-            pcall(function() AFKConnection:Disconnect() end)
-            AFKConnection = nil
-        end
+        if AFKConnection then pcall(function() AFKConnection:Disconnect() end); AFKConnection = nil end
         Notify("Anti-AFK", "Desactivado.")
     end
 end)
 
 CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", false, function(state)
-    if LocalPlayer.Character then
-        ApplyLocalModifications(LocalPlayer.Character)
-    end
+    if LocalPlayer.Character then ApplyLocalModifications(LocalPlayer.Character) end
 end)
 
 CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", false, function(state)
-    if LocalPlayer.Character then
-        ApplyLocalModifications(LocalPlayer.Character)
-    end
+    if LocalPlayer.Character then ApplyLocalModifications(LocalPlayer.Character) end
 end)
 
--- BoostFPS
+-- BoostFPS Optimizado
 CreateToggle(tabLocal, "BoostFPS (Engine Optimization)", "Local", "BoostFPS", true, function(state)
     if state then
-        table.clear(OriginalMaterials)
+        table_clear(OriginalMaterials)
         task.spawn(function()
             local queue = {workspace}
             local count = 0
@@ -833,9 +768,7 @@ CreateToggle(tabLocal, "BoostFPS (Engine Optimization)", "Local", "BoostFPS", tr
                             child.Material = Enum.Material.SmoothPlastic
                         end
                     end
-                    if #child:GetChildren() > 0 then
-                        table.insert(queue, child)
-                    end
+                    if #child:GetChildren() > 0 then table_insert(queue, child) end
                     count = count + 1
                     if count >= 300 then
                         count = 0
@@ -856,37 +789,28 @@ CreateToggle(tabLocal, "BoostFPS (Engine Optimization)", "Local", "BoostFPS", tr
                     end
                 end
             end)
-            table.insert(Connections, BoostFPSConnection)
+            table_insert(Connections, BoostFPSConnection)
         end
-        Notify("Optimizador", "BoostFPS activado de forma segura.")
+        Notify("Optimizador", "BoostFPS activado eficientemente.")
     else
         for obj, mat in pairs(OriginalMaterials) do
             if obj and obj.Parent then obj.Material = mat end
         end
-        table.clear(OriginalMaterials)
-        if BoostFPSConnection then
-            pcall(function() BoostFPSConnection:Disconnect() end)
-            BoostFPSConnection = nil
-        end
+        table_clear(OriginalMaterials)
+        if BoostFPSConnection then pcall(function() BoostFPSConnection:Disconnect() end); BoostFPSConnection = nil end
         Notify("Optimizador", "BoostFPS desactivado.")
     end
 end)
 
 -- Settings
 CreateButton(tabSettings, "Save Config", function()
-    if SaveConfiguration() then
-        Notify("Config", "Configuración guardada exitosamente.")
-    else
-        Notify("Config", "Error al guardar (Exploit sin soporte de archivos).")
-    end
+    if SaveConfiguration() then Notify("Config", "Configuración guardada exitosamente.")
+    else Notify("Config", "Error al guardar (Exploit sin soporte de archivos).") end
 end)
 
 CreateButton(tabSettings, "Load Config", function()
-    if LoadConfiguration() then
-        Notify("Config", "Configuración cargada correctamente.")
-    else
-        Notify("Config", "No se encontró configuración guardada.")
-    end
+    if LoadConfiguration() then Notify("Config", "Configuración cargada correctamente.")
+    else Notify("Config", "No se encontró configuración guardada.") end
 end)
 
 CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
@@ -907,7 +831,7 @@ CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
         if esp.Dist then esp.Dist:Remove() end
         for _, line in pairs(esp.Skeleton or {}) do line:Remove() end
     end
-    table.clear(CharacterCache)
+    table_clear(CharacterCache)
     Notify("Panic", "Desvinculación y limpieza total ejecutada.")
 end)
 
@@ -918,25 +842,23 @@ activeTab = Tabs["Aimbot"]
 
 -- Arrastre de UI Principal
 local dragToggle, dragStart, startPos
-table.insert(Connections, mainFrame.InputBegan:Connect(function(input)
+table_insert(Connections, mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = true; dragStart = input.Position; startPos = mainFrame.Position end
 end))
-table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+table_insert(Connections, UserInputService.InputChanged:Connect(function(input)
     if dragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end))
-table.insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end))
+table_insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end))
 
-table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gpe)
-    if not gpe and input.KeyCode == Config.Settings.Keybind then 
-        mainFrame.Visible = not mainFrame.Visible 
-    end
+table_insert(Connections, UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Config.Settings.Keybind then mainFrame.Visible = not mainFrame.Visible end
 end))
 
 -- ==========================================
--- 8. DRAWING PIPELINE, STATS & BUCLES
+-- 8. DRAWING PIPELINE, STATS & BUCLES V5.2 RESTORED
 -- ==========================================
 if hasDrawing then
     _G.HkFovCircle = Drawing.new("Circle")
@@ -980,8 +902,8 @@ local isAiming = false
 local lockedTargetPart = nil
 local currentBestTargetPart = nil
 
-table.insert(Connections, UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
-table.insert(Connections, UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false; lockedTargetPart = nil end end))
+table_insert(Connections, UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
+table_insert(Connections, UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false; lockedTargetPart = nil end end))
 
 local frameCount = 0
 local fpsTimer = 0
@@ -989,36 +911,32 @@ local currentFPS = 60
 local currentPing = 0
 
 -- ----------------------------------------------------
--- THREAD A: HEARTBEAT (ESP, FPS/MS & Sincronización)
+-- THREAD A: HEARTBEAT (ESP & Stats Monitor)
 -- ----------------------------------------------------
-table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
+table_insert(Connections, RunService.Heartbeat:Connect(function(dt)
     if Unloaded then return end
 
     frameCount = frameCount + 1
     fpsTimer = fpsTimer + dt
     if fpsTimer >= 0.5 then
-        currentFPS = math.floor(frameCount / fpsTimer)
+        currentFPS = math_floor(frameCount / fpsTimer)
         frameCount = 0
         fpsTimer = 0
         
         pcall(function()
-            currentPing = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0)
+            currentPing = math_floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0)
         end)
         
         if Config.Visuals.ShowStatsHud then
-            topHudLabel.Text = string.format("FPS: %d  |  MS: %dms", currentFPS, currentPing)
+            topHudLabel.Text = string_format("FPS: %d  |  MS: %dms", currentFPS, currentPing)
         end
     end
     TopStatsHud.Visible = Config.Visuals.ShowStatsHud
 
-    if #ActivePlayersList ~= #Players:GetPlayers() then
-        RefreshActivePlayersList()
-    end
+    if #ActivePlayersList ~= #Players:GetPlayers() then RefreshActivePlayersList() end
 
-    CurrentFrameId = CurrentFrameId + 1
-    table.clear(VisibilityFrameCache)
-
-    local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(time() % 3 / 3, 0.8, 1) or ThemeColor
+    VisibilityFrameCache = {}
+    local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(os_clock() % 3 / 3, 0.8, 1) or ThemeColor
     local mousePos = UserInputService:GetMouseLocation()
     
     local shortestDist = Config.Aimbot.FOV
@@ -1050,7 +968,7 @@ table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
 
                 if hum.Health > 0 and not isTeammate then
                     local vector, onScreen = Camera:WorldToViewportPoint(root.Position)
-                    local physDist = math.floor((Camera.CFrame.Position - root.Position).Magnitude)
+                    local physDist = math_floor((Camera.CFrame.Position - root.Position).Magnitude)
 
                     if onScreen and hasDrawing and physDist <= 300 then
                         local distFromCenter = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
@@ -1058,7 +976,7 @@ table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
                         if Config.Visuals.Box and esp and esp.Box then
                             local headV = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
                             local legV = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
-                            local boxH = math.abs(headV.Y - legV.Y)
+                            local boxH = math_abs(headV.Y - legV.Y)
                             esp.Box.Size = Vector2.new(boxH * 0.6, boxH)
                             esp.Box.Position = Vector2.new(headV.X - (esp.Box.Size.X / 2), headV.Y)
                             esp.Box.Color = activeColor
@@ -1113,9 +1031,9 @@ table.insert(Connections, RunService.Heartbeat:Connect(function(dt)
 end))
 
 -- ----------------------------------------------------
--- THREAD B: RENDERSTEPPED (Cámara sin Jitter / Anti-Fight)
+-- THREAD B: RENDERSTEPPED (Aimbot V5.2 Hard-Lock / Pegado como robot)
 -- ----------------------------------------------------
-table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
+table_insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if Unloaded then return end
 
     local mousePos = UserInputService:GetMouseLocation()
@@ -1136,9 +1054,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
             end
         end
 
-        if not lockedTargetPart then
-            lockedTargetPart = currentBestTargetPart
-        end
+        if not lockedTargetPart then lockedTargetPart = currentBestTargetPart end
 
         if lockedTargetPart and lockedTargetPart.Parent then
             local targetChar = lockedTargetPart.Parent
@@ -1147,9 +1063,9 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
 
             if cache and cache.Humanoid and targetPlayer then
                 targetNameLbl.Text = targetPlayer.Name
-                local healthPct = math.clamp(cache.Humanoid.Health / cache.Humanoid.MaxHealth, 0, 1)
+                local healthPct = math_clamp(cache.Humanoid.Health / cache.Humanoid.MaxHealth, 0, 1)
                 targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
-                targetHealthText.Text = math.floor(cache.Humanoid.Health) .. " HP"
+                targetHealthText.Text = math_floor(cache.Humanoid.Health) .. " HP"
                 TargetHudFrame.Position = UDim2.new(0, mousePos.X + Config.Aimbot.FOV + 15, 0, mousePos.Y - 24)
                 TargetHudFrame.Visible = true
             end
@@ -1160,10 +1076,8 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
                 targetPos = targetPos + (cache.RootPart.AssemblyLinearVelocity * (dist / 1500))
             end
 
-            local currentPos = Camera.CFrame.Position
-            local targetCFrame = CFrame.lookAt(currentPos, targetPos)
-            local alpha = math.clamp(dt * (11 - Config.Aimbot.Smoothness), 0.05, 1)
-            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, alpha)
+            -- BLOQUEO INSTANTÁNEO / HARD-LOCK (V5.2 Original - Pegado como robot)
+            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
         else
             TargetHudFrame.Visible = false
         end
@@ -1174,13 +1088,13 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
 end))
 
 -- ----------------------------------------------------
--- THREAD C: TASK LOOP (TriggerBot con pcall persistente)
+-- THREAD C: TASK LOOP (TriggerBot con pcall aislado)
 -- ----------------------------------------------------
 task.spawn(function()
     while not Unloaded do
         task.wait(Config.Aimbot.TriggerDelay)
         
-        local success, err = pcall(function()
+        pcall(function()
             if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot and hasMouseClick then
                 local mousePos = UserInputService:GetMouseLocation()
                 local unitRay = Camera:ScreenPointToRay(mousePos.X, mousePos.Y)
@@ -1190,27 +1104,16 @@ task.spawn(function()
                 
                 if rayResult and rayResult.Instance then
                     local hitChar = rayResult.Instance.Parent
-                    local hitPlayer = nil
+                    local hitPlayer = hitChar and (Players:GetPlayerFromCharacter(hitChar) or (hitChar.Parent and Players:GetPlayerFromCharacter(hitChar.Parent)))
                     
-                    if hitChar then
-                        hitPlayer = Players:GetPlayerFromCharacter(hitChar)
-                        if not hitPlayer and hitChar.Parent then
-                            hitPlayer = Players:GetPlayerFromCharacter(hitChar.Parent)
-                        end
-                    end
-                    
-                    if hitPlayer and hitPlayer ~= LocalPlayer and hitPlayer:IsA("Player") then
+                    if hitPlayer and hitPlayer ~= LocalPlayer then
                         local cache = CharacterCache[hitPlayer]
-                        if cache and cache.Humanoid and cache.RootPart and cache.Head and cache.Humanoid.Health > 0 and not IsTeammate(hitPlayer) then
+                        if cache and cache.Humanoid and cache.Humanoid.Health > 0 and not IsTeammate(hitPlayer) then
                             mouse1click()
                         end
                     end
                 end
             end
         end)
-        
-        if not success then
-            task.wait(1)
-        end
     end
 end)
