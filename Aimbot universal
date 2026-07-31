@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.3 (Production Grade, Fully Restored Visuals & Enhanced UI - Aimbot Restored)
+    HKSTUDIO ELITE HUB - V5.4 (Fully Restored: Aimbot, Visuals & Complete Settings / Config System)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -22,7 +22,7 @@ local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 local hasMouseClick = (mouse1click ~= nil and type(mouse1click) == "function")
 
 -- ==========================================
--- 1. CONFIGURACIÓN Y CACHÉ GLOBAL (Aimbot restaurado al original)
+-- 1. CONFIGURACIÓN Y CACHÉ GLOBAL
 -- ==========================================
 local Config = {
     Aimbot = { 
@@ -325,7 +325,7 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. CONSTRUCCIÓN DE LA INTERFAZ (UI MEJORADA)
+-- 4. CONSTRUCCIÓN DE LA INTERFAZ
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
 mainFrame.Size = UDim2.new(0, 680, 0, 420)
@@ -584,13 +584,14 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
 end
 
 -- ==========================================
--- 5. CONSTRUCCIÓN DE PESTAÑAS (Aimbot Original)
+-- 5. CONSTRUCCIÓN DE PESTAÑAS
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
 local tabLocal = CreateTab("🏃", "Local")
 local tabSettings = CreateTab("⚙️", "Settings")
 
+-- Aimbot Tab
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
@@ -600,6 +601,7 @@ end)
 CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 1, 10)
 CreateSlider(tabAimbot, "FOV Radius", "Aimbot", "FOV", 50, 600)
 
+-- Visuals Tab
 CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", false)
 CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", false)
 CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", false)
@@ -607,6 +609,7 @@ CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", false)
 CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", false)
 CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", false)
 
+-- Local Tab
 CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", false, function(state)
     Lighting.Ambient = state and Color3.new(1, 1, 1) or OriginalLighting.Ambient
     Lighting.Brightness = state and 2 or OriginalLighting.Brightness
@@ -718,6 +721,75 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     end
 )
 
+-- Settings Tab (Restauradas las opciones de Save, Load, Unload / Unlink y Anti-AFK)
+CreateButton(tabSettings, "Guardar Config", function()
+    if not hasFileAPI then Notify("Settings", "File API no disponible.") return end
+    local success, err = pcall(function()
+        local data = HttpService:JSONEncode(Config)
+        writefile("HkStudioConfig.json", data)
+    end)
+    if success then Notify("Settings", "Configuración guardada.") else Notify("Settings", "Error al guardar.") end
+end)
+
+CreateButton(tabSettings, "Cargar Config", function()
+    if not hasFileAPI or not isfile("HkStudioConfig.json") then Notify("Settings", "No hay configuración guardada.") return end
+    local success, err = pcall(function()
+        local data = readfile("HkStudioConfig.json")
+        local decoded = HttpService:JSONDecode(data)
+        for cat, v in pairs(decoded) do
+            if Config[cat] then
+                for k, val in pairs(v) do
+                    Config[cat][k] = val
+                end
+            end
+        end
+    end)
+    if success then Notify("Settings", "Configuración cargada.") else Notify("Settings", "Error al cargar.") end
+end)
+
+CreateToggle(tabSettings, "Anti-AFK", "Settings", "AntiAFK", true, function(state)
+    if state then
+        task.spawn(function()
+            local vu = game:GetService("VirtualUser")
+            while Config.Settings.AntiAFK and not Unloaded do
+                pcall(function()
+                    vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                    task.wait(1)
+                    vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                end)
+                task.wait(60)
+            end
+        end)
+    end
+end)
+
+CreateButton(tabSettings, "Unload / Unlink Hub", function()
+    Unloaded = true
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(Connections)
+    
+    for _, esp in pairs(EspCache) do
+        pcall(function()
+            esp.Box:Remove()
+            esp.Tracer:Remove()
+            esp.Info:Remove()
+            for _, bone in ipairs(esp.Bones) do bone:Remove() end
+        end)
+    end
+    table.clear(EspCache)
+
+    pcall(function()
+        Lighting.Ambient = OriginalLighting.Ambient
+        Lighting.Brightness = OriginalLighting.Brightness
+        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+        Lighting.FogEnd = OriginalLighting.FogEnd
+    end)
+
+    pcall(function() hkGui:Destroy() end)
+end)
+
 -- ==========================================
 -- 6. MOTOR COMPLETO DE VISUALES Y ESP
 -- ==========================================
@@ -782,7 +854,6 @@ end
 
 Players.PlayerRemoving:Connect(RemoveEsp)
 
--- Bucle de renderizado de Visuales (ESP & Chams)
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
@@ -791,7 +862,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
             local rootPart = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 
-            -- Gestión de Chams (Highlight)
             if char then
                 local hl = char:FindFirstChild("HkChamsHighlight")
                 if Config.Visuals.Chams and humanoid and humanoid.Health > 0 and not IsTeammate(player) then
@@ -815,7 +885,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                 if onScreen then
                     local distance = (Camera.CFrame.Position - rootPart.Position).Magnitude
                     
-                    -- Box ESP
                     if Config.Visuals.Box then
                         local size = char:GetExtentsSize()
                         local topPos, topOnScreen = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, size.Y / 2 + 0.5, 0))
@@ -834,7 +903,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Box.Visible = false
                     end
 
-                    -- Tracers
                     if Config.Visuals.Tracers then
                         esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
                         esp.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
@@ -844,7 +912,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Tracer.Visible = false
                     end
 
-                    -- Info
                     if Config.Visuals.Info then
                         esp.Info.Position = Vector2.new(rootPos.X, rootPos.Y - 35)
                         esp.Info.Text = string.format("%s [%dm]", player.Name, math.floor(distance))
@@ -854,7 +921,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         esp.Info.Visible = false
                     end
 
-                    -- Skeleton (Bones)
                     if Config.Visuals.Skeleton then
                         local head = char:FindFirstChild("Head")
                         local upperTorso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
@@ -921,7 +987,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT (Restaurado al original con Click Derecho / RMB)
+-- 7. MOTOR DE AIMBOT
 -- ==========================================
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if not Config.Aimbot.Enabled then
@@ -929,7 +995,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- Activar solo al mantener Click Derecho (RMB) como en la versión antigua
     if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         TargetHudFrame.Visible = false
         return
