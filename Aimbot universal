@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.3 (Production Grade, Fully Restored Visuals & Enhanced UI)
+    HKSTUDIO ELITE HUB - V5.3 (Production Grade, Fully Restored Visuals & Enhanced UI - Aimbot Restored)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -22,7 +22,7 @@ local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 local hasMouseClick = (mouse1click ~= nil and type(mouse1click) == "function")
 
 -- ==========================================
--- 1. CONFIGURACIÓN Y CACHÉ GLOBAL
+-- 1. CONFIGURACIÓN Y CACHÉ GLOBAL (Aimbot restaurado al original)
 -- ==========================================
 local Config = {
     Aimbot = { 
@@ -30,12 +30,8 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
-        Smoothness = 2, 
-        Predict = false, 
-        FOV = 150, 
-        TriggerBot = false,
-        PredictionMultiplier = 1000,
-        TriggerDelay = 0.1
+        Smoothness = 5, 
+        FOV = 150
     },
     Visuals = { 
         Chams = false, 
@@ -68,7 +64,6 @@ local TextWhite = Color3.fromRGB(240, 240, 245)
 local Connections = {}
 local EspCache = {}
 local Unloaded = false
-local LastTriggerTick = 0
 local CooldownTable = {}
 
 -- Cachés de mapa y rendimiento
@@ -589,7 +584,7 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
 end
 
 -- ==========================================
--- 5. CONSTRUCCIÓN DE PESTAÑAS
+-- 5. CONSTRUCCIÓN DE PESTAÑAS (Aimbot Original)
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
@@ -599,8 +594,6 @@ local tabSettings = CreateTab("⚙️", "Settings")
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
-CreateToggle(tabAimbot, "Trigger Bot", "Aimbot", "TriggerBot", true)
-CreateToggle(tabAimbot, "Lead Target (Predicción)", "Aimbot", "Predict", false)
 CreateButton(tabAimbot, "Target: Head", function()
     Config.Aimbot.TargetPart = Config.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head"
 end)
@@ -737,16 +730,16 @@ local function GetOrCreateEsp(player)
         Tracer = Drawing.new("Line"),
         Info = Drawing.new("Text"),
         Bones = {
-            Drawing.new("Line"), -- Head to UpperTorso
-            Drawing.new("Line"), -- UpperTorso to LowerTorso
-            Drawing.new("Line"), -- UpperTorso to LeftUpperArm
-            Drawing.new("Line"), -- LeftUpperArm to LeftLowerArm
-            Drawing.new("Line"), -- UpperTorso to RightUpperArm
-            Drawing.new("Line"), -- RightUpperArm to RightLowerArm
-            Drawing.new("Line"), -- LowerTorso to LeftUpperLeg
-            Drawing.new("Line"), -- LeftUpperLeg to LeftLowerLeg
-            Drawing.new("Line"), -- LowerTorso to RightUpperLeg
-            Drawing.new("Line"), -- RightUpperLeg to RightLowerLeg
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
+            Drawing.new("Line"),
         }
     }
 
@@ -781,7 +774,6 @@ local function RemoveEsp(player)
         end)
         EspCache[player] = nil
     end
-    -- Eliminar chams highlight
     if player.Character then
         local hl = player.Character:FindFirstChild("HkChamsHighlight")
         if hl then hl:Destroy() end
@@ -818,96 +810,96 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                 end
             end
 
-            -- Gestión de Drawing ESP (Box, Tracers, Bones, Info)
-            if hasDrawing and esp and char and rootPart and humanoid and humanoid.Health > 0 and not IsTeammate(player) then
-                local head = char:FindFirstChild("Head")
-                if head then
-                    local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-                    local rootPos, rootOnScreen = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
-
-                    if headOnScreen or rootOnScreen then
-                        local height = math.abs(headPos.Y - rootPos.Y)
-                        local width = height / 2
-                        local boxPos = Vector2.new(headPos.X - width / 2, headPos.Y)
-
-                        -- Box ESP
-                        if Config.Visuals.Box then
-                            esp.Box.Visible = true
+            if esp and rootPart and humanoid and humanoid.Health > 0 and not IsTeammate(player) then
+                local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+                if onScreen then
+                    local distance = (Camera.CFrame.Position - rootPart.Position).Magnitude
+                    
+                    -- Box ESP
+                    if Config.Visuals.Box then
+                        local size = char:GetExtentsSize()
+                        local topPos, topOnScreen = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, size.Y / 2 + 0.5, 0))
+                        local botPos, botOnScreen = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, size.Y / 2 + 0.5, 0))
+                        if topOnScreen and botOnScreen then
+                            local height = math.abs(topPos.Y - botPos.Y)
+                            local width = height / 2
                             esp.Box.Size = Vector2.new(width, height)
-                            esp.Box.Position = boxPos
+                            esp.Box.Position = Vector2.new(rootPos.X - width / 2, topPos.Y)
                             esp.Box.Color = CurrentThemeColor
+                            esp.Box.Visible = true
                         else
                             esp.Box.Visible = false
                         end
-
-                        -- Tracers
-                        if Config.Visuals.Tracers then
-                            esp.Tracer.Visible = true
-                            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            esp.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
-                            esp.Tracer.Color = CurrentThemeColor
-                        else
-                            esp.Tracer.Visible = false
-                        end
-
-                        -- Info Tag
-                        if Config.Visuals.Info then
-                            esp.Info.Visible = true
-                            local dist = math.floor((Camera.CFrame.Position - rootPart.Position).Magnitude)
-                            esp.Info.Text = string.format("%s [%dm]", player.Name, dist)
-                            esp.Info.Position = Vector2.new(headPos.X, headPos.Y - 18)
-                            esp.Info.Color = TextWhite
-                        else
-                            esp.Info.Visible = false
-                        end
-
-                        -- Skeleton Bones (R15 Compatible)
-                        if Config.Visuals.Skeleton then
-                            local function getJoint2D(partName1, partName2)
-                                local p1 = char:FindFirstChild(partName1)
-                                local p2 = char:FindFirstChild(partName2)
-                                if p1 and p2 then
-                                    local pos1, on1 = Camera:WorldToViewportPoint(p1.Position)
-                                    local pos2, on2 = Camera:WorldToViewportPoint(p2.Position)
-                                    if on1 or on2 then
-                                        return Vector2.new(pos1.X, pos1.Y), Vector2.new(pos2.X, pos2.Y), true
-                                    end
-                                end
-                                return Vector2.zero, Vector2.zero, false
-                            end
-
-                            local joints = {
-                                {"Head", "UpperTorso"},
-                                {"UpperTorso", "LowerTorso"},
-                                {"UpperTorso", "LeftUpperArm"},
-                                {"LeftUpperArm", "LeftLowerArm"},
-                                {"UpperTorso", "RightUpperArm"},
-                                {"RightUpperArm", "RightLowerArm"},
-                                {"LowerTorso", "LeftUpperLeg"},
-                                {"LeftUpperLeg", "LeftLowerLeg"},
-                                {"LowerTorso", "RightUpperLeg"},
-                                {"RightUpperLeg", "RightLowerLeg"}
-                            }
-
-                            for i, joint in ipairs(joints) do
-                                local bLine = esp.Bones[i]
-                                local fromPos, toPos, valid = getJoint2D(joint[1], joint[2])
-                                if valid then
-                                    bLine.Visible = true
-                                    bLine.From = fromPos
-                                    bLine.To = toPos
-                                    bLine.Color = CurrentThemeColor
-                                else
-                                    bLine.Visible = false
-                                end
-                            end
-                        else
-                            for _, bone in ipairs(esp.Bones) do bone.Visible = false end
-                        end
                     else
                         esp.Box.Visible = false
+                    end
+
+                    -- Tracers
+                    if Config.Visuals.Tracers then
+                        esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        esp.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
+                        esp.Tracer.Color = CurrentThemeColor
+                        esp.Tracer.Visible = true
+                    else
                         esp.Tracer.Visible = false
+                    end
+
+                    -- Info
+                    if Config.Visuals.Info then
+                        esp.Info.Position = Vector2.new(rootPos.X, rootPos.Y - 35)
+                        esp.Info.Text = string.format("%s [%dm]", player.Name, math.floor(distance))
+                        esp.Info.Color = TextWhite
+                        esp.Info.Visible = true
+                    else
                         esp.Info.Visible = false
+                    end
+
+                    -- Skeleton (Bones)
+                    if Config.Visuals.Skeleton then
+                        local head = char:FindFirstChild("Head")
+                        local upperTorso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+                        local lowerTorso = char:FindFirstChild("LowerTorso") or rootPart
+                        local leftUpperArm = char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("Left Arm")
+                        local leftLowerArm = char:FindFirstChild("LeftLowerArm")
+                        local rightUpperArm = char:FindFirstChild("RightUpperArm") or char:FindFirstChild("Right Arm")
+                        local rightLowerArm = char:FindFirstChild("RightLowerArm")
+                        local leftUpperLeg = char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("Left Leg")
+                        local leftLowerLeg = char:FindFirstChild("LeftLowerLeg")
+                        local rightUpperLeg = char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("Right Leg")
+                        local rightLowerLeg = char:FindFirstChild("RightLowerLeg")
+
+                        local bonePairs = {
+                            {head, upperTorso},
+                            {upperTorso, lowerTorso},
+                            {upperTorso, leftUpperArm},
+                            {leftUpperArm, leftLowerArm},
+                            {upperTorso, rightUpperArm},
+                            {rightUpperArm, rightLowerArm},
+                            {lowerTorso, leftUpperLeg},
+                            {leftUpperLeg, leftLowerLeg},
+                            {lowerTorso, rightUpperLeg},
+                            {rightUpperLeg, rightLowerLeg}
+                        }
+
+                        for i, pair in ipairs(bonePairs) do
+                            local p1, p2 = pair[1], pair[2]
+                            local boneLine = esp.Bones[i]
+                            if boneLine and p1 and p2 then
+                                local pos1, vis1 = Camera:WorldToViewportPoint(p1.Position)
+                                local pos2, vis2 = Camera:WorldToViewportPoint(p2.Position)
+                                if vis1 and vis2 then
+                                    boneLine.From = Vector2.new(pos1.X, pos1.Y)
+                                    boneLine.To = Vector2.new(pos2.X, pos2.Y)
+                                    boneLine.Color = CurrentThemeColor
+                                    boneLine.Visible = true
+                                else
+                                    boneLine.Visible = false
+                                end
+                            else
+                                if boneLine then boneLine.Visible = false end
+                            end
+                        end
+                    else
                         for _, bone in ipairs(esp.Bones) do bone.Visible = false end
                     end
                 else
@@ -929,216 +921,71 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. BLOQUE DE AIMBOT & FOV CIRCLE
+-- 7. MOTOR DE AIMBOT (Restaurado al original con Click Derecho / RMB)
 -- ==========================================
-local fovCircle = nil
-if hasDrawing then
-    pcall(function()
-        fovCircle = Drawing.new("Circle")
-        fovCircle.Visible = false
-        fovCircle.Filled = false
-        fovCircle.Thickness = 1.5
-        fovCircle.Transparency = 0.8
-        _G.HkFovCircle = fovCircle
-    end)
-end
+table.insert(Connections, RunService.RenderStepped:Connect(function()
+    if not Config.Aimbot.Enabled then
+        TargetHudFrame.Visible = false
+        return
+    end
 
-local function GetClosestTarget()
-    local bestTarget = nil
-    local bestPlayer = nil
+    -- Activar solo al mantener Click Derecho (RMB) como en la versión antigua
+    if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        TargetHudFrame.Visible = false
+        return
+    end
+
+    local closestTarget = nil
     local shortestDist = Config.Aimbot.FOV
     local mousePos = UserInputService:GetMouseLocation()
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and not IsTeammate(player) then
             local char = player.Character
-            if char then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart)
-                    if targetPart then
-                        if IsVisible(targetPart) then
-                            local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-                            if onScreen then
-                                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                                if dist < shortestDist then
-                                    shortestDist = dist
-                                    bestTarget = targetPart
-                                    bestPlayer = player
-                                end
-                            end
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if char and humanoid and humanoid.Health > 0 then
+                local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart) or char:FindFirstChild("Head")
+                if targetPart and IsVisible(targetPart) then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            closestTarget = targetPart
                         end
                     end
                 end
             end
         end
     end
-    return bestTarget, bestPlayer
-end
 
-table.insert(Connections, RunService.RenderStepped:Connect(function()
-    local mousePos = UserInputService:GetMouseLocation()
-
-    if fovCircle then
-        if Config.Aimbot.Enabled then
-            fovCircle.Visible = true
-            fovCircle.Radius = Config.Aimbot.FOV
-            fovCircle.Position = mousePos
-            fovCircle.Color = CurrentThemeColor
-        else
-            fovCircle.Visible = false
-        end
-    end
-
-    if not Config.Aimbot.Enabled then
-        TargetHudFrame.Visible = false
-        return
-    end
-
-    local targetPart, targetPlayer = GetClosestTarget()
-
-    if targetPart and targetPlayer then
-        TargetHudFrame.Visible = true
-        targetNameLbl.Text = targetPlayer.Name
-        local char = targetPlayer.Character
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    if closestTarget then
+        local targetChar = closestTarget.Parent
+        local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-            targetHealthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
-            targetHealthText.Text = math.floor(healthPercent * 100) .. "%"
+            local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+            targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
+            targetHealthText.Text = math.floor(healthPct * 100) .. "%"
+            targetNameLbl.Text = targetChar.Name
+            TargetHudFrame.Visible = true
         end
 
-        local targetPos = targetPart.Position
-        if Config.Aimbot.Predict and targetPart.AssemblyLinearVelocity then
-            targetPos = targetPos + (targetPart.AssemblyLinearVelocity * (Camera.CFrame.Position - targetPos).Magnitude / Config.Aimbot.PredictionMultiplier)
-        end
-
-        local currentCamCFrame = Camera.CFrame
-        local targetCFrame = CFrame.new(currentCamCFrame.Position, targetPos)
+        local targetPos = closestTarget.Position
+        local currentCFrame = Camera.CFrame
+        local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
         
-        if Config.Aimbot.Smoothness <= 1 then
-            Camera.CFrame = targetCFrame
-        else
-            Camera.CFrame = currentCamCFrame:Lerp(targetCFrame, 1 / Config.Aimbot.Smoothness)
-        end
-
-        if Config.Aimbot.TriggerBot and hasMouseClick then
-            local now = tick()
-            if (now - LastTriggerTick) >= Config.Aimbot.TriggerDelay then
-                LastTriggerTick = now
-                pcall(function() mouse1click() end)
-            end
-        end
+        local smoothness = math.clamp(Config.Aimbot.Smoothness, 1, 10)
+        Camera.CFrame = currentCFrame:Lerp(targetCFrame, 1 / smoothness)
     else
         TargetHudFrame.Visible = false
     end
 end))
 
 -- ==========================================
--- 8. SETTINGS Y PERSISTENCIA
+-- 8. TOGGLE DE INTERFAZ GENERAL
 -- ==========================================
-local ConfigFileName = "HkStudio_Config.json"
-
-local function SaveConfiguration()
-    if not CheckCooldown("SaveConfig", 2) then return end
-    if not hasFileAPI then Notify("Error", "APIs de archivos no soportadas.") return end
-    
-    Config.Settings.UIPosition = {
-        X = mainFrame.Position.X.Scale,
-        XOffset = mainFrame.Position.X.Offset,
-        Y = mainFrame.Position.Y.Scale,
-        YOffset = mainFrame.Position.Y.Offset
-    }
-
-    local saveData = { 
-        Aimbot = Config.Aimbot, 
-        Visuals = Config.Visuals, 
-        Local = Config.Local, 
-        Settings = { 
-            Keybind = Config.Settings.Keybind.Name, 
-            AntiAFK = Config.Settings.AntiAFK,
-            UIPosition = Config.Settings.UIPosition
-        } 
-    }
-    local success, encoded = pcall(function() return HttpService:JSONEncode(saveData) end)
-    if success and encoded then
-        writefile(ConfigFileName, encoded)
-        Notify("Configuración", "Configuración guardada.")
-    else
-        Notify("Error", "Fallo al codificar JSON.")
-    end
-end
-
-local function LoadConfiguration()
-    if not CheckCooldown("LoadConfig", 2) then return end
-    if not hasFileAPI then Notify("Error", "APIs de archivos no soportadas.") return end
-    if isfile and isfile(ConfigFileName) then
-        local rawData = readfile(ConfigFileName)
-        local success, decoded = pcall(function() return HttpService:JSONDecode(rawData) end)
-        if success and decoded then
-            if decoded.Aimbot then for k,v in pairs(decoded.Aimbot) do Config.Aimbot[k] = v end end
-            if decoded.Visuals then for k,v in pairs(decoded.Visuals) do Config.Visuals[k] = v end end
-            if decoded.Local then for k,v in pairs(decoded.Local) do Config.Local[k] = v end end
-            if decoded.Settings then
-                if decoded.Settings.Keybind and Enum.KeyCode[decoded.Settings.Keybind] then Config.Settings.Keybind = Enum.KeyCode[decoded.Settings.Keybind] end
-                if decoded.Settings.AntiAFK ~= nil then Config.Settings.AntiAFK = decoded.Settings.AntiAFK end
-                if decoded.Settings.UIPosition then
-                    local p = decoded.Settings.UIPosition
-                    Config.Settings.UIPosition = p
-                    mainFrame.Position = UDim2.new(p.X, p.XOffset, p.Y, p.YOffset)
-                end
-            end
-            Notify("Configuración", "Configuración cargada.")
-        else
-            Notify("Error", "Archivo de configuración corrupto.")
-        end
-    else
-        Notify("Configuración", "No hay configuración guardada previa.")
-    end
-end
-
-local keybindBtn = CreateButton(tabSettings, "Keybind: " .. Config.Settings.Keybind.Name, function() end)
-keybindBtn.MouseButton1Click:Connect(function()
-    keybindBtn.Text = "Pulsa cualquier tecla..."
-    local conn
-    conn = UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            Config.Settings.Keybind = input.KeyCode
-            keybindBtn.Text = "Keybind: " .. input.KeyCode.Name
-            Notify("Settings", "Keybind actualizado a: " .. input.KeyCode.Name)
-            conn:Disconnect()
-        end
-    end)
-end)
-
-CreateToggle(tabSettings, "Anti AFK", "Settings", "AntiAFK", false)
-
-table.insert(Connections, LocalPlayer.Idled:Connect(function()
-    if Config.Settings.AntiAFK then
-        local vu = game:GetService("VirtualUser")
-        pcall(function()
-            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            task.wait(1)
-            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        end)
-    end
-end))
-
-CreateButton(tabSettings, "SaveConfig", SaveConfiguration)
-CreateButton(tabSettings, "LoadConfig", LoadConfiguration)
-
-CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
-    Unloaded = true
-    for _, con in pairs(Connections) do pcall(function() con:Disconnect() end) end
-    pcall(function() hkGui:Destroy() end)
-    for _, p in pairs(Players:GetPlayers()) do
-        RemoveEsp(p)
-    end
-    pcall(function() if _G.HkFovCircle then _G.HkFovCircle:Remove() end end)
-end)
-
 table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Config.Settings.Keybind then
+    if input.KeyCode == Config.Settings.Keybind then
         mainFrame.Visible = not mainFrame.Visible
     end
 end))
