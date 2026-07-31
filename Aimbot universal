@@ -1,5 +1,6 @@
 --[[
-    HKSTUDIO ELITE HUB - V8.1 (Aimbot V5.2 Hard-Lock Restored + Classic Stats HUD)
+    HKSTUDIO ELITE HUB - V5.2 (Production Grade, Zero-Lag, Fully Hardened + Target HUD)
+    Architecture: Modular, Event-Driven Cleanup & Target Info Overlay
 ]]
 
 local Players = game:GetService("Players")
@@ -9,27 +10,19 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
-local VirtualUser = game:GetService("VirtualUser")
-local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Caché de funciones nativas para máximo rendimiento
-local math_floor = math.floor
-local math_abs = math.abs
-local math_clamp = math.clamp
-local string_format = string.format
-local table_insert = table.insert
-local table_clear = table.clear
-local os_clock = os.clock
-
+-- ==========================================
+-- 0. SEGURIDAD DE ENTORNO Y COMPATIBILIDAD
+-- ==========================================
 local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
+local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 local hasMouseClick = (mouse1click ~= nil and type(mouse1click) == "function")
-local hasFileOps = (writefile ~= nil and readfile ~= nil)
 
 -- ==========================================
--- 1. CONFIGURACIÓN GLOBAL
+-- 1. CONFIGURACIÓN Y CACHÉ GLOBAL
 -- ==========================================
 local Config = {
     Aimbot = { 
@@ -37,10 +30,11 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
+        Smoothness = 1, 
         Predict = false, 
         FOV = 150, 
         TriggerBot = false,
-        PredictionMultiplier = 15,
+        PredictionMultiplier = 1000,
         TriggerDelay = 0.1
     },
     Visuals = { 
@@ -49,53 +43,20 @@ local Config = {
         Box = false, 
         Tracers = false, 
         Info = false, 
-        Rainbow = false,
-        ShowStatsHud = true
+        Rainbow = false 
     },
     Local = { 
         Fullbright = false, 
-        BoostFPS = false,
         Noclip = false, 
-        AFK = false,
+        BoostFPS = false, 
         FakeKorblox = false, 
         FakeHeadless = false 
     },
     Settings = { 
         Keybind = Enum.KeyCode.RightShift,
-        UIPosition = {X = 0.5, XOffset = -325, Y = 0.5, YOffset = -200},
-        TopHudPosition = {X = 0, XOffset = 20, Y = 0, YOffset = 20}
+        AntiAFK = false,
+        UIPosition = {X = 0.5, XOffset = -325, Y = 0.5, YOffset = -200}
     }
-}
-
-local CONFIG_FILENAME = "HkStudio_Config.json"
-
-local function SaveConfiguration()
-    if not hasFileOps then return false end
-    local success, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
-    if success then writefile(CONFIG_FILENAME, encoded); return true end
-    return false
-end
-
-local function LoadConfiguration()
-    if not hasFileOps or not isfile or not isfile(CONFIG_FILENAME) then return false end
-    local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILENAME)) end)
-    if success and type(decoded) == "table" then
-        for cat, vals in pairs(decoded) do
-            if Config[cat] and type(vals) == "table" then
-                for k, v in pairs(vals) do
-                    if Config[cat][k] ~= nil then Config[cat][k] = v end
-                end
-            end
-        end
-        return true
-    end
-    return false
-end
-
-local FactionAlliances = {
-    {"police", "swat", "army", "military", "marines", "government", "fbi", "cia"},
-    {"civilian", "neutral", "citizen"},
-    {"criminal", "bandit", "mafia", "gang"}
 }
 
 local ThemeColor = Color3.fromRGB(120, 80, 255)
@@ -104,172 +65,29 @@ local BgDark = Color3.fromRGB(15, 15, 18)
 local BgLight = Color3.fromRGB(22, 22, 28)
 local TextWhite = Color3.fromRGB(230, 230, 230)
 
--- ==========================================
--- 2. GESTIÓN DE CACHÉ Y ESTADOS
--- ==========================================
 local Connections = {}
 local PlayerConnections = {}
-local ActivePlayersList = {}
 local Unloaded = false
+local LastTriggerTick = 0
+local CooldownTable = {}
 
-local TeamCache = {}
-local TeamCacheExpiry = {}
-local AllianceCache = {}
-
-local OriginalMaterials = setmetatable({}, {__mode = "k"})
-local BoostFPSConnection = nil
-local AFKConnection = nil
-
-local VisibilityRaycastParams = RaycastParams.new()
-VisibilityRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
-VisibilityRaycastParams.IgnoreWater = true
-
-local TriggerBotRaycastParams = RaycastParams.new()
-TriggerBotRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
-TriggerBotRaycastParams.IgnoreWater = true
-
-local CharacterCache = setmetatable({}, {__mode = "k"})
-local VisibilityTimeCache = {}
-local VisibilityResultCache = {}
-local VisibilityFrameCache = {}
-
+-- Cachés de mapa y rendimiento
 local OriginalLighting = {
     Ambient = Lighting.Ambient,
     Brightness = Lighting.Brightness,
-    GlobalShadows = Lighting.GlobalShadows
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd
 }
+local OriginalMaterials = {}
+local OriginalDecalTransparencies = {}
+local OriginalTextureTransparencies = {}
+local OriginalTransparencies = {}
 
-local function RefreshActivePlayersList()
-    table_clear(ActivePlayersList)
-    for _, p in ipairs(Players:GetPlayers()) do
-        table_insert(ActivePlayersList, p)
-    end
-end
-
--- ==========================================
--- 3. CICLO DE VIDA DE PERSONAJES
--- ==========================================
-local function CleanupPlayerConnections(player)
-    if PlayerConnections[player] then
-        for _, conn in ipairs(PlayerConnections[player]) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table_clear(PlayerConnections[player])
-    else
-        PlayerConnections[player] = {}
-    end
-
-    local cacheData = CharacterCache[player]
-    if cacheData and cacheData.Chams then
-        pcall(function() cacheData.Chams:Destroy() end)
-        cacheData.Chams = nil
-    end
-end
-
-local function ApplyLocalModifications(char)
-    if not char then return end
-    local head = char:FindFirstChild("Head")
-    if head then
-        head.Transparency = Config.Local.FakeHeadless and 1 or 0
-        local face = head:FindFirstChild("face")
-        if face then face.Transparency = Config.Local.FakeHeadless and 1 or 0 end
-    end
-
-    local rightLeg = char:FindFirstChild("RightLowerLeg") or char:FindFirstChild("RightLeg")
-    local rightFoot = char:FindFirstChild("RightFoot")
-    if rightLeg and rightFoot then
-        rightLeg.Transparency = Config.Local.FakeKorblox and 1 or 0
-        rightFoot.Transparency = Config.Local.FakeKorblox and 1 or 0
-    end
-end
-
-local function BindCharacterCache(player, char)
-    if not char then 
-        local old = CharacterCache[player]
-        if old and old.Chams then pcall(function() old.Chams:Destroy() end) end
-        CharacterCache[player] = nil
-        return 
-    end
-
-    for _, child in ipairs(char:GetChildren()) do
-        if child.Name == "HkChams" and child:IsA("Highlight") then pcall(function() child:Destroy() end) end
-    end
-
-    local entry = {
-        Character = char,
-        Humanoid = char:FindFirstChildOfClass("Humanoid"),
-        RootPart = char:FindFirstChild("HumanoidRootPart"),
-        Head = char:FindFirstChild("Head"),
-        CurrentTool = char:FindFirstChildOfClass("Tool"),
-        Chams = nil
-    }
-    
-    CharacterCache[player] = entry
-    if player == LocalPlayer then ApplyLocalModifications(char) end
-
-    local pConns = PlayerConnections[player]
-    table_insert(pConns, char.ChildAdded:Connect(function(child)
-        if child:IsA("Humanoid") then entry.Humanoid = child
-        elseif child.Name == "HumanoidRootPart" then entry.RootPart = child
-        elseif child.Name == "Head" then entry.Head = child
-        elseif child:IsA("Tool") then entry.CurrentTool = child
-        elseif child.Name == "HkChams" and child:IsA("Highlight") then 
-            if entry.Chams and entry.Chams ~= child then pcall(function() entry.Chams:Destroy() end) end
-            entry.Chams = child 
-        end
-        if player == LocalPlayer then ApplyLocalModifications(char) end
-    end))
-    
-    table_insert(pConns, char.ChildRemoved:Connect(function(child)
-        if child == entry.CurrentTool then entry.CurrentTool = char:FindFirstChildOfClass("Tool")
-        elseif child == entry.Chams then entry.Chams = nil end
-    end))
-end
-
-local function SetupPlayerLifecycle(player)
-    CleanupPlayerConnections(player)
-    if player.Character then BindCharacterCache(player, player.Character) end
-    table_insert(PlayerConnections[player], player.CharacterAdded:Connect(function(char) BindCharacterCache(player, char) end))
-    table_insert(PlayerConnections[player], player.CharacterRemoving:Connect(function()
-        local cacheData = CharacterCache[player]
-        if cacheData and cacheData.Chams then pcall(function() cacheData.Chams:Destroy() end) end
-        CharacterCache[player] = nil
-    end))
-end
-
-for _, p in ipairs(Players:GetPlayers()) do SetupPlayerLifecycle(p) end
-RefreshActivePlayersList()
-
-table_insert(Connections, Players.PlayerAdded:Connect(function(p)
-    RefreshActivePlayersList()
-    SetupPlayerLifecycle(p)
-end))
-
-table_insert(Connections, Players.PlayerRemoving:Connect(function(p)
-    CleanupPlayerConnections(p)
-    CharacterCache[p] = nil
-    TeamCache[p] = nil
-    TeamCacheExpiry[p] = nil
-    PlayerConnections[p] = nil
-    VisibilityTimeCache[p] = nil
-    VisibilityResultCache[p] = nil
-    
-    if _G.HkDrawingCache and _G.HkDrawingCache[p] then
-        local esp = _G.HkDrawingCache[p]
-        pcall(function()
-            if esp.Box then esp.Box:Remove() end
-            if esp.Tracer then esp.Tracer:Remove() end
-            if esp.Name then esp.Name:Remove() end
-            if esp.Dist then esp.Dist:Remove() end
-            if esp.Skeleton then for _, line in pairs(esp.Skeleton) do line:Remove() end end
-        end)
-        _G.HkDrawingCache[p] = nil
-    end
-    RefreshActivePlayersList()
-end))
+local VisibilityCache = {}
+local LastVisibilityClock = 0
 
 -- ==========================================
--- 4. INTERFAZ GRÁFICA & CUADRO CLÁSICO
+-- 2. SISTEMA DE NOTIFICACIONES Y TARGET HUD
 -- ==========================================
 local hkGui = Instance.new("ScreenGui")
 hkGui.Name = "HkStudioElite"
@@ -278,7 +96,6 @@ hkGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() hkGui.Parent = CoreGui end)
 if not hkGui.Parent then hkGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
--- Notificaciones
 local NotifyContainer = Instance.new("Frame", hkGui)
 NotifyContainer.Size = UDim2.new(0, 250, 1, -20)
 NotifyContainer.Position = UDim2.new(1, -260, 0, 10)
@@ -325,7 +142,7 @@ local function Notify(title, text)
     textLbl.TextSize = 12
     textLbl.Text = text
 
-    table_insert(ActiveNotifications, notif)
+    table.insert(ActiveNotifications, notif)
     TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
     
     task.delay(3, function()
@@ -341,64 +158,10 @@ local function Notify(title, text)
     end)
 end
 
--- ==========================================
--- CUADRO CLÁSICO DE STATS (HkStudio | Stats)
--- ==========================================
-local TopStatsHud = Instance.new("Frame", hkGui)
-TopStatsHud.Name = "HkStudioStatsHud"
-TopStatsHud.Size = UDim2.new(0, 160, 0, 42)
-TopStatsHud.Position = UDim2.new(Config.Settings.TopHudPosition.X, Config.Settings.TopHudPosition.XOffset, Config.Settings.TopHudPosition.Y, Config.Settings.TopHudPosition.YOffset)
-TopStatsHud.BackgroundColor3 = BgDark
-TopStatsHud.ZIndex = 10
-Instance.new("UICorner", TopStatsHud).CornerRadius = UDim.new(0, 6)
-
-local topHudStroke = Instance.new("UIStroke", TopStatsHud)
-topHudStroke.Color = ThemeColor
-topHudStroke.Thickness = 1
-
-local topHudTitle = Instance.new("TextLabel", TopStatsHud)
-topHudTitle.Size = UDim2.new(1, -10, 0, 16)
-topHudTitle.Position = UDim2.new(0, 6, 0, 3)
-topHudTitle.BackgroundTransparency = 1
-topHudTitle.TextColor3 = ThemeColor
-topHudTitle.Font = Enum.Font.GothamBold
-topHudTitle.TextSize = 10
-topHudTitle.TextXAlignment = Enum.TextXAlignment.Left
-topHudTitle.Text = "HkStudio | Stats"
-topHudTitle.ZIndex = 11
-
-local topHudLabel = Instance.new("TextLabel", TopStatsHud)
-topHudLabel.Size = UDim2.new(1, -10, 0, 18)
-topHudLabel.Position = UDim2.new(0, 6, 0, 20)
-topHudLabel.BackgroundTransparency = 1
-topHudLabel.TextColor3 = TextWhite
-topHudLabel.Font = Enum.Font.Gotham
-topHudLabel.TextSize = 10
-topHudLabel.TextXAlignment = Enum.TextXAlignment.Left
-topHudLabel.Text = "FPS: 60  |  MS: 0ms"
-topHudLabel.ZIndex = 11
-
-local topDragToggle, topDragStart, topStartPos
-table_insert(Connections, TopStatsHud.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        topDragToggle = true
-        topDragStart = input.Position
-        topStartPos = TopStatsHud.Position
-    end
-end))
-table_insert(Connections, UserInputService.InputChanged:Connect(function(input)
-    if topDragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - topDragStart
-        TopStatsHud.Position = UDim2.new(topStartPos.X.Scale, topStartPos.X.Offset + delta.X, topStartPos.Y.Scale, topStartPos.Y.Offset + delta.Y)
-    end
-end))
-table_insert(Connections, UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then topDragToggle = false end
-end))
-
--- Target HUD
+-- Target Info HUD (Cuadro de objetivo fijado con nombre y vida)
 local TargetHudFrame = Instance.new("Frame", hkGui)
 TargetHudFrame.Size = UDim2.new(0, 170, 0, 48)
+TargetHudFrame.Position = UDim2.new(0.5, -85, 0.65, 0)
 TargetHudFrame.BackgroundColor3 = BgDark
 TargetHudFrame.Visible = false
 TargetHudFrame.ZIndex = 5
@@ -435,104 +198,125 @@ targetHealthText.Font = Enum.Font.GothamBold
 targetHealthText.TextSize = 9
 targetHealthText.Text = "100%"
 
--- ==========================================
--- 5. LÓGICA ESPACIAL Y WALLCHECK
--- ==========================================
-local function GetPlayerTeamName(player)
-    local now = os_clock()
-    if TeamCache[player] and (now - (TeamCacheExpiry[player] or 0)) < 2.0 then
-        return TeamCache[player]
+local function CheckCooldown(actionName, cooldownTime)
+    local now = tick()
+    if CooldownTable[actionName] and (now - CooldownTable[actionName]) < cooldownTime then
+        return false
     end
-
-    local result = nil
-    if player.Team then 
-        result = player.Team.Name 
-    else
-        local attributes = {"Team", "Faction", "Role", "Job", "Equipo", "Rol"}
-        local cacheData = CharacterCache[player]
-        for _, attr in ipairs(attributes) do
-            local val = player:GetAttribute(attr) or (cacheData and cacheData.Character and cacheData.Character:GetAttribute(attr))
-            if val then result = tostring(val); break end
-        end
-    end
-
-    TeamCache[player] = result
-    TeamCacheExpiry[player] = now
-    return result
+    CooldownTable[actionName] = now
+    return true
 end
 
-local function AreFactionsAllied(teamA, teamB)
-    if not teamA or not teamB then return false end
-    local key = teamA:lower() .. "_" .. teamB:lower()
-    if AllianceCache[key] ~= nil then return AllianceCache[key] end
+-- ==========================================
+-- 3. HUD Y COMPROBACIONES SEGURAS
+-- ==========================================
+local topHud = Instance.new("Frame", hkGui)
+topHud.Size = UDim2.new(0, 220, 0, 25)
+topHud.Position = UDim2.new(0.5, -110, 0, 15)
+topHud.BackgroundColor3 = BgDark
+topHud.Active = true
+topHud.Draggable = true
+Instance.new("UICorner", topHud).CornerRadius = UDim.new(0, 6)
+local topStroke = Instance.new("UIStroke", topHud)
+topStroke.Color = ThemeColor
+topStroke.Thickness = 1
 
-    if teamA:lower() == teamB:lower() then
-        AllianceCache[key] = true
-        return true
+local topText = Instance.new("TextLabel", topHud)
+topText.Size = UDim2.new(1, 0, 1, 0)
+topText.BackgroundTransparency = 1
+topText.TextColor3 = TextWhite
+topText.Font = Enum.Font.GothamBold
+topText.TextSize = 12
+topText.Text = "HkStudio | FPS: -- | Ping: --"
+
+local frameAccumulator, frameCount = 0, 0
+table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
+    frameAccumulator = frameAccumulator + dt
+    frameCount = frameCount + 1
+    if frameAccumulator >= 1 then
+        local fps = math.floor(frameCount / frameAccumulator)
+        local ping = 0
+        pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing() * 1000) end)
+        topText.Text = string.format("HkStudio | FPS: %d | Ping: %dms", fps, ping)
+        frameAccumulator, frameCount = 0, 0
     end
+end))
 
-    for _, allianceGroup in ipairs(FactionAlliances) do
-        local inA, inB = false, false
-        for _, member in ipairs(allianceGroup) do
-            if teamA:lower():find(member) then inA = true end
-            if teamB:lower():find(member) then inB = true end
-        end
-        if inA and inB then
-            AllianceCache[key] = true
-            return true
+local function GetPlayerTeamName(player)
+    if player.Team then return player.Team.Name end
+    local attrs = {"Team", "Faction", "Role", "Job", "Trabajo", "Equipo", "Rol"}
+    for _, attr in ipairs(attrs) do
+        local val = player:GetAttribute(attr) or (player.Character and player.Character:GetAttribute(attr))
+        if val then return tostring(val) end
+    end
+    local ls = player:FindFirstChild("leaderstats")
+    if ls then
+        for _, attr in ipairs(attrs) do
+            local val = ls:FindFirstChild(attr) or player:FindFirstChild(attr)
+            if val and val:IsA("ValueBase") then return tostring(val.Value) end
         end
     end
-
-    AllianceCache[key] = false
-    return false
+    return nil
 end
 
 local function IsTeammate(player)
     if not Config.Aimbot.TeamCheck then return false end
     if player == LocalPlayer then return true end
-    
-    local myTeam = GetPlayerTeamName(LocalPlayer)
-    local targetTeam = GetPlayerTeamName(player)
-
-    if myTeam and targetTeam and AreFactionsAllied(myTeam, targetTeam) then return true end
-    if LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then return true end
-
-    return false
+    local myTeam, tTeam = GetPlayerTeamName(LocalPlayer), GetPlayerTeamName(player)
+    if myTeam and tTeam then
+        if myTeam:lower() == tTeam:lower() then return true end
+    end
+    return LocalPlayer.Team ~= nil and player.Team ~= nil and LocalPlayer.TeamColor == player.TeamColor
 end
 
-local function IsVisible(targetPart, player)
-    if not Config.Aimbot.WallCheck then return true end
-    if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then return false end
-    
-    if VisibilityFrameCache[targetPart] ~= nil then return VisibilityFrameCache[targetPart] end
+local function IsSafeDestination(cframe)
+    local pos = cframe.Position
+    if math.abs(pos.X) > 100000 or math.abs(pos.Z) > 100000 or pos.Y < -500 then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    if LocalPlayer.Character then params.FilterDescendantsInstances = {LocalPlayer.Character} end
+    local ray = workspace:Raycast(pos + Vector3.new(0, 5, 0), Vector3.new(0, -50, 0), params)
+    return ray ~= nil
+end
 
-    local now = os_clock()
-    if player and VisibilityTimeCache[player] and (now - VisibilityTimeCache[player]) < 0.15 then
-        if VisibilityResultCache[player] ~= nil then return VisibilityResultCache[player] end
+local function IsVisible(targetPart)
+    if not Config.Aimbot.WallCheck then return true end
+    if not targetPart or not targetPart.Parent then return false end
+    
+    local currentClock = os.clock()
+    if (currentClock - LastVisibilityClock) > 0.05 then
+        table.clear(VisibilityCache)
+        LastVisibilityClock = currentClock
+    end
+    if VisibilityCache[targetPart] ~= nil then
+        return VisibilityCache[targetPart]
     end
 
     local camPos = Camera.CFrame.Position
     local targetPos = targetPart.Position
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
     
-    VisibilityRaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-    local rayResult = workspace:Raycast(camPos, targetPos - camPos, VisibilityRaycastParams)
+    local success, result = pcall(function()
+        return workspace:Raycast(camPos, targetPos - camPos, params)
+    end)
+    
     local visible = true
-    
-    if rayResult and rayResult.Instance then
-        if not rayResult.Instance:IsDescendantOf(targetPart.Parent) then visible = false end
+    if success and result then
+        local hitInstance = result.Instance
+        if hitInstance and not hitInstance:IsDescendantOf(targetPart.Parent) then
+            visible = false
+        end
     end
-    
-    if player then
-        VisibilityTimeCache[player] = now
-        VisibilityResultCache[player] = visible
-    end
-
-    VisibilityFrameCache[targetPart] = visible
+    VisibilityCache[targetPart] = visible
     return visible
 end
 
 -- ==========================================
--- 6. CONSTRUCCIÓN DE UI (MENÚ PRINCIPAL)
+-- 4. CONSTRUCCIÓN DE UI
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
 mainFrame.Size = UDim2.new(0, 650, 0, 400)
@@ -577,7 +361,7 @@ local function CreateTab(icon, name)
     local btn = Instance.new("TextButton", tabContainer)
     btn.Size = UDim2.new(1, 0, 0, 35)
     btn.BackgroundTransparency = 1
-    btn.Text = "   " .. icon .. "   " .. name
+    btn.Text = "    " .. icon .. "    " .. name
     btn.TextColor3 = Color3.fromRGB(150, 150, 150)
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.Font = Enum.Font.GothamSemibold
@@ -601,6 +385,7 @@ local function CreateTab(icon, name)
     local grid = Instance.new("UIGridLayout", scroll)
     grid.CellSize = UDim2.new(0.48, 0, 0, 45)
     grid.CellPadding = UDim2.new(0, 12, 0, 12)
+    grid.SortOrder = Enum.SortOrder.LayoutOrder
 
     Tabs[name] = {Button = btn, Frame = scroll, Indicator = indicator}
 
@@ -652,8 +437,81 @@ local function CreateToggle(parent, text, configCat, configKey, isMasterAction, 
         btn.BackgroundColor3 = state and ThemeColor or Color3.fromRGB(50,50,55)
         TweenService:Create(knob, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
         
-        if isMasterAction then Notify("HkStudio", text .. (state and " activado" or " desactivado")) end
+        if isMasterAction then
+            Notify("HkStudio", text .. (state and " activado" or " desactivado"))
+        end
         if customCallback then customCallback(state) end
+    end)
+end
+
+-- Slider Global
+local ActiveSlider = nil
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if ActiveSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local track = ActiveSlider.Track
+        local min = ActiveSlider.Min
+        local max = ActiveSlider.Max
+        local fill = ActiveSlider.Fill
+        local valLbl = ActiveSlider.ValLbl
+        local cat = ActiveSlider.Cat
+        local key = ActiveSlider.Key
+
+        local mx = UserInputService:GetMouseLocation().X
+        local rel = math.clamp(mx - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
+        local pctNum = rel / track.AbsoluteSize.X
+        fill.Size = UDim2.new(pctNum, 0, 1, 0)
+        local value = math.floor(min + (pctNum * (max - min)))
+        Config[cat][key] = value
+        valLbl.Text = tostring(value)
+    end
+end))
+
+table.insert(Connections, UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        ActiveSlider = nil
+    end
+end))
+
+local function CreateSlider(parent, text, configCat, configKey, min, max)
+    local base = Instance.new("Frame", parent)
+    base.BackgroundColor3 = BgLight
+    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 6)
+    
+    local lbl = Instance.new("TextLabel", base)
+    lbl.Size = UDim2.new(1, -10, 0, 15)
+    lbl.Position = UDim2.new(0, 15, 0, 5)
+    lbl.BackgroundTransparency = 1
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextColor3 = TextWhite
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.Text = text
+
+    local valLbl = Instance.new("TextLabel", base)
+    valLbl.Size = UDim2.new(0, 40, 0, 15)
+    valLbl.Position = UDim2.new(1, -50, 0, 5)
+    valLbl.BackgroundTransparency = 1
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valLbl.TextColor3 = ThemeColor
+    valLbl.Font = Enum.Font.GothamBold
+    valLbl.TextSize = 10
+    valLbl.Text = tostring(Config[configCat][configKey])
+
+    local track = Instance.new("TextButton", base)
+    track.Size = UDim2.new(1, -30, 0, 4)
+    track.Position = UDim2.new(0, 15, 0, 28)
+    track.BackgroundColor3 = Color3.fromRGB(50,50,55)
+    track.Text = ""
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    
+    local fill = Instance.new("Frame", track)
+    local pct = (Config[configCat][configKey] - min) / (max - min)
+    fill.Size = UDim2.new(pct, 0, 1, 0)
+    fill.BackgroundColor3 = ThemeColor
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    track.MouseButton1Down:Connect(function()
+        ActiveSlider = {Track = track, Min = min, Max = max, Fill = fill, ValLbl = valLbl, Cat = configCat, Key = configKey}
     end)
 end
 
@@ -669,451 +527,415 @@ local function CreateButton(parent, text, callback)
     return btn
 end
 
+local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback)
+    local btn = CreateButton(parent, text .. " ▼", function() end)
+    
+    local listFrame = Instance.new("ScrollingFrame", hkGui)
+    listFrame.Size = UDim2.new(0, 150, 0, 120)
+    listFrame.BackgroundColor3 = BgLight
+    listFrame.Visible = false
+    listFrame.ZIndex = 10
+    listFrame.ScrollBarThickness = 2
+    Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 6)
+    local listStroke = Instance.new("UIStroke", listFrame)
+    listStroke.Color = ThemeColor
+    
+    local layout = Instance.new("UIListLayout", listFrame)
+    layout.Padding = UDim.new(0, 2)
+    
+    btn.MouseButton1Click:Connect(function()
+        listFrame.Visible = not listFrame.Visible
+        if listFrame.Visible then
+            listFrame.Position = UDim2.new(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 5)
+            for _, v in pairs(listFrame:GetChildren()) do 
+                if v:IsA("TextButton") then v:Destroy() end 
+            end
+            local options = getOptionsCallback()
+            for _, opt in ipairs(options) do
+                local item = Instance.new("TextButton", listFrame)
+                item.Size = UDim2.new(1, 0, 0, 25)
+                item.BackgroundTransparency = 1
+                item.Text = opt.Name
+                item.TextColor3 = TextWhite
+                item.Font = Enum.Font.Gotham
+                item.TextSize = 12
+                item.ZIndex = 11
+                item.MouseButton1Click:Connect(function()
+                    listFrame.Visible = false
+                    btn.Text = "TP: " .. opt.Name .. " ▼"
+                    onSelectCallback(opt)
+                end)
+            end
+        end
+    end)
+end
+
 -- ==========================================
--- 7. PESTAÑAS DEL PANEL
+-- 5. CONSTRUCCIÓN DE PESTAÑAS
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
 local tabLocal = CreateTab("🏃", "Local")
 local tabSettings = CreateTab("⚙️", "Settings")
 
--- Aimbot
 CreateToggle(tabAimbot, "Master Aimbot", "Aimbot", "Enabled", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
 CreateToggle(tabAimbot, "Trigger Bot", "Aimbot", "TriggerBot", true)
 CreateToggle(tabAimbot, "Lead Target (Predicción)", "Aimbot", "Predict", false)
-
--- Visuals
-CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", false, function(state)
-    if not state then
-        for _, player in ipairs(ActivePlayersList) do
-            local cache = CharacterCache[player]
-            if cache and cache.Chams then
-                pcall(function() cache.Chams:Destroy() end)
-                cache.Chams = nil
-            end
-        end
-    end
+CreateButton(tabAimbot, "Target: Head", function()
+    Config.Aimbot.TargetPart = Config.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head"
 end)
+CreateSlider(tabAimbot, "Aim Smoothness", "Aimbot", "Smoothness", 1, 10)
+CreateSlider(tabAimbot, "FOV Radius", "Aimbot", "FOV", 50, 600)
+
+CreateToggle(tabVisuals, "Chams ESP", "Visuals", "Chams", false)
 CreateToggle(tabVisuals, "Bone Skeleton", "Visuals", "Skeleton", false)
 CreateToggle(tabVisuals, "Box ESP", "Visuals", "Box", false)
 CreateToggle(tabVisuals, "Tracers", "Visuals", "Tracers", false)
 CreateToggle(tabVisuals, "Distance & Info", "Visuals", "Info", false)
 CreateToggle(tabVisuals, "Rainbow Mode", "Visuals", "Rainbow", false)
-CreateToggle(tabVisuals, "Stats Box HUD", "Visuals", "ShowStatsHud", true, function(state)
-    TopStatsHud.Visible = state
-end)
 
--- Local
 CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", false, function(state)
     Lighting.Ambient = state and Color3.new(1, 1, 1) or OriginalLighting.Ambient
     Lighting.Brightness = state and 2 or OriginalLighting.Brightness
     Lighting.GlobalShadows = not state
 end)
 
-CreateToggle(tabLocal, "Noclip", "Local", "Noclip", true)
-
-table_insert(Connections, RunService.Stepped:Connect(function()
-    if Config.Local.Noclip and LocalPlayer.Character then
-        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
-    end
-end))
-
-CreateToggle(tabLocal, "Anti-AFK", "Local", "AFK", true, function(state)
+CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, function(state)
     if state then
-        if not AFKConnection then
-            AFKConnection = LocalPlayer.Idled:Connect(function()
-                if Config.Local.AFK then
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new())
-                    Notify("Anti-AFK", "Inactividad evitada correctamente.")
+        task.spawn(function()
+            local count = 0
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if Unloaded then break end
+                if v:IsA("BasePart") then
+                    OriginalMaterials[v] = v.Material
+                    v.Material = Enum.Material.SmoothPlastic
+                elseif v:IsA("Decal") then
+                    OriginalDecalTransparencies[v] = v.Transparency
+                    v.Transparency = 1
+                elseif v:IsA("Texture") then
+                    OriginalTextureTransparencies[v] = v.Transparency
+                    v.Transparency = 1
                 end
-            end)
-            table_insert(Connections, AFKConnection)
-        end
-        Notify("Anti-AFK", "Activado.")
+                count = count + 1
+                if count % 600 == 0 then task.wait() end
+            end
+            Notify("Optimizador", "BoostFPS aplicado.")
+        end)
     else
-        if AFKConnection then pcall(function() AFKConnection:Disconnect() end); AFKConnection = nil end
-        Notify("Anti-AFK", "Desactivado.")
+        task.spawn(function()
+            local count = 0
+            for part, mat in pairs(OriginalMaterials) do
+                if part and part.Parent then part.Material = mat end
+                count = count + 1
+                if count % 600 == 0 then task.wait() end
+            end
+            table.clear(OriginalMaterials)
+            
+            for decal, trans in pairs(OriginalDecalTransparencies) do
+                if decal and decal.Parent then decal.Transparency = trans end
+            end
+            table.clear(OriginalDecalTransparencies)
+
+            for tex, trans in pairs(OriginalTextureTransparencies) do
+                if tex and tex.Parent then tex.Transparency = trans end
+            end
+            table.clear(OriginalTextureTransparencies)
+            Notify("Optimizador", "BoostFPS restaurado.")
+        end)
     end
 end)
 
 CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", false, function(state)
-    if LocalPlayer.Character then ApplyLocalModifications(LocalPlayer.Character) end
-end)
-
-CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", false, function(state)
-    if LocalPlayer.Character then ApplyLocalModifications(LocalPlayer.Character) end
-end)
-
--- BoostFPS Optimizado
-CreateToggle(tabLocal, "BoostFPS (Engine Optimization)", "Local", "BoostFPS", true, function(state)
-    if state then
-        table_clear(OriginalMaterials)
-        task.spawn(function()
-            local queue = {workspace}
-            local count = 0
-            while #queue > 0 and Config.Local.BoostFPS and not Unloaded do
-                local current = table.remove(queue, 1)
-                for _, child in ipairs(current:GetChildren()) do
-                    if not Config.Local.BoostFPS or Unloaded then break end
-                    if child:IsA("BasePart") then
-                        local modelParent = child:FindFirstAncestorOfClass("Model")
-                        local isPlayerChar = modelParent and Players:GetPlayerFromCharacter(modelParent) ~= nil
-                        if not isPlayerChar then
-                            OriginalMaterials[child] = child.Material
-                            child.Material = Enum.Material.SmoothPlastic
-                        end
-                    end
-                    if #child:GetChildren() > 0 then table_insert(queue, child) end
-                    count = count + 1
-                    if count >= 300 then
-                        count = 0
-                        task.defer(task.wait)
-                    end
-                end
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, pName in ipairs({"RightUpperLeg", "RightLowerLeg", "RightFoot"}) do
+        local p = char:FindFirstChild(pName)
+        if p then
+            if state then
+                OriginalTransparencies[pName] = p.Transparency
+                p.Transparency = 1
+            else
+                if OriginalTransparencies[pName] then p.Transparency = OriginalTransparencies[pName] end
             end
-        end)
-
-        if not BoostFPSConnection then
-            BoostFPSConnection = workspace.DescendantAdded:Connect(function(obj)
-                if Config.Local.BoostFPS and obj:IsA("BasePart") then
-                    local modelParent = obj:FindFirstAncestorOfClass("Model")
-                    local isPlayerChar = modelParent and Players:GetPlayerFromCharacter(modelParent) ~= nil
-                    if not isPlayerChar then
-                        OriginalMaterials[obj] = obj.Material
-                        obj.Material = Enum.Material.SmoothPlastic
-                    end
-                end
-            end)
-            table_insert(Connections, BoostFPSConnection)
         end
-        Notify("Optimizador", "BoostFPS activado eficientemente.")
-    else
-        for obj, mat in pairs(OriginalMaterials) do
-            if obj and obj.Parent then obj.Material = mat end
-        end
-        table_clear(OriginalMaterials)
-        if BoostFPSConnection then pcall(function() BoostFPSConnection:Disconnect() end); BoostFPSConnection = nil end
-        Notify("Optimizador", "BoostFPS desactivado.")
     end
 end)
 
--- Settings
-CreateButton(tabSettings, "Save Config", function()
-    if SaveConfiguration() then Notify("Config", "Configuración guardada exitosamente.")
-    else Notify("Config", "Error al guardar (Exploit sin soporte de archivos).") end
+CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", false, function(state)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local head = char:FindFirstChild("Head")
+    if head then
+        if state then
+            OriginalTransparencies["Head"] = head.Transparency
+            head.Transparency = 1
+            local face = head:FindFirstChild("face")
+            if face then
+                OriginalTransparencies["Face"] = face.Transparency
+                face.Transparency = 1
+            end
+        else
+            head.Transparency = OriginalTransparencies["Head"] or 0
+            local face = head:FindFirstChild("face")
+            if face then face.Transparency = OriginalTransparencies["Face"] or 0 end
+        end
+    end
 end)
 
-CreateButton(tabSettings, "Load Config", function()
-    if LoadConfiguration() then Notify("Config", "Configuración cargada correctamente.")
-    else Notify("Config", "No se encontró configuración guardada.") end
+CreateDropdown(tabLocal, "Teleport a Jugador", 
+    function()
+        local list = {}
+        for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list, p) end end
+        return list
+    end, 
+    function(selectedPlayer)
+        if not CheckCooldown("Teleport", 1) then return end
+        if selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetCFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+            if IsSafeDestination(targetCFrame) then
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char:PivotTo(targetCFrame)
+                    Notify("Teleport", "Teletransportado a " .. selectedPlayer.Name)
+                end
+            else
+                Notify("Teleport", "Destino bloqueado o inseguro.")
+            end
+        end
+    end
+)
+
+-- ==========================================
+-- 6. BLOQUE COMPLETO DE AIMBOT & FOV CIRCLE
+-- ==========================================
+local fovCircle = nil
+if hasDrawing then
+    pcall(function()
+        fovCircle = Drawing.new("Circle")
+        fovCircle.Visible = false
+        fovCircle.Filled = false
+        fovCircle.Thickness = 1
+        fovCircle.Color = ThemeColor
+        fovCircle.Transparency = 0.8
+        _G.HkFovCircle = fovCircle
+    end)
+end
+
+local function GetClosestTarget()
+    local bestTarget = nil
+    local bestPlayer = nil
+    local shortestDist = Config.Aimbot.FOV
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and not IsTeammate(player) then
+            local char = player.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart)
+                    if targetPart then
+                        if IsVisible(targetPart) then
+                            local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                            if onScreen then
+                                local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                                if dist < shortestDist then
+                                    shortestDist = dist
+                                    bestTarget = targetPart
+                                    bestPlayer = player
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestTarget, bestPlayer
+end
+
+table.insert(Connections, RunService.RenderStepped:Connect(function()
+    local mousePos = UserInputService:GetMouseLocation()
+
+    -- Actualizar Círculo FOV
+    if fovCircle then
+        if Config.Aimbot.Enabled then
+            fovCircle.Visible = true
+            fovCircle.Radius = Config.Aimbot.FOV
+            fovCircle.Position = mousePos
+            fovCircle.Color = ThemeColor
+        else
+            fovCircle.Visible = false
+        end
+    end
+
+    if not Config.Aimbot.Enabled then
+        TargetHudFrame.Visible = false
+        return
+    end
+
+    local targetPart, targetPlayer = GetClosestTarget()
+
+    if targetPart and targetPlayer then
+        -- Actualizar Target HUD
+        TargetHudFrame.Visible = true
+        targetNameLbl.Text = targetPlayer.Name
+        local char = targetPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+            targetHealthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
+            targetHealthText.Text = math.floor(healthPercent * 100) .. "%"
+        end
+
+        -- Lógica de Aim
+        local targetPos = targetPart.Position
+        if Config.Aimbot.Predict and targetPart.AssemblyLinearVelocity then
+            targetPos = targetPos + (targetPart.AssemblyLinearVelocity * (Camera.CFrame.Position - targetPos).Magnitude / Config.Aimbot.PredictionMultiplier)
+        end
+
+        local currentCamCFrame = Camera.CFrame
+        local targetCFrame = CFrame.new(currentCamCFrame.Position, targetPos)
+        
+        if Config.Aimbot.Smoothness <= 1 then
+            Camera.CFrame = targetCFrame
+        else
+            Camera.CFrame = currentCamCFrame:Lerp(targetCFrame, 1 / Config.Aimbot.Smoothness)
+        end
+
+        -- Triggerbot
+        if Config.Aimbot.TriggerBot and hasMouseClick then
+            local now = tick()
+            if (now - LastTriggerTick) >= Config.Aimbot.TriggerDelay then
+                LastTriggerTick = now
+                pcall(function()
+                    mouse1click()
+                end)
+            end
+        end
+    else
+        TargetHudFrame.Visible = false
+    end
+end))
+
+-- ==========================================
+-- 7. SETTINGS Y PERSISTENCIA DE CONFIGURACIÓN
+-- ==========================================
+local ConfigFileName = "HkStudio_Config.json"
+
+local function SaveConfiguration()
+    if not CheckCooldown("SaveConfig", 2) then return end
+    if not hasFileAPI then Notify("Error", "APIs de archivos no soportadas.") return end
+    
+    Config.Settings.UIPosition = {
+        X = mainFrame.Position.X.Scale,
+        XOffset = mainFrame.Position.X.Offset,
+        Y = mainFrame.Position.Y.Scale,
+        YOffset = mainFrame.Position.Y.Offset
+    }
+
+    local saveData = { 
+        Aimbot = Config.Aimbot, 
+        Visuals = Config.Visuals, 
+        Local = Config.Local, 
+        Settings = { 
+            Keybind = Config.Settings.Keybind.Name, 
+            AntiAFK = Config.Settings.AntiAFK,
+            UIPosition = Config.Settings.UIPosition
+        } 
+    }
+    local success, encoded = pcall(function() return HttpService:JSONEncode(saveData) end)
+    if success and encoded then
+        writefile(ConfigFileName, encoded)
+        Notify("Configuración", "Configuración guardada.")
+    else
+        Notify("Error", "Fallo al codificar JSON.")
+    end
+end
+
+local function LoadConfiguration()
+    if not CheckCooldown("LoadConfig", 2) then return end
+    if not hasFileAPI then Notify("Error", "APIs de archivos no soportadas.") return end
+    if isfile and isfile(ConfigFileName) then
+        local rawData = readfile(ConfigFileName)
+        local success, decoded = pcall(function() return HttpService:JSONDecode(rawData) end)
+        if success and decoded then
+            if decoded.Aimbot then for k,v in pairs(decoded.Aimbot) do Config.Aimbot[k] = v end end
+            if decoded.Visuals then for k,v in pairs(decoded.Visuals) do Config.Visuals[k] = v end end
+            if decoded.Local then for k,v in pairs(decoded.Local) do Config.Local[k] = v end end
+            if decoded.Settings then
+                if decoded.Settings.Keybind and Enum.KeyCode[decoded.Settings.Keybind] then Config.Settings.Keybind = Enum.KeyCode[decoded.Settings.Keybind] end
+                if decoded.Settings.AntiAFK ~= nil then Config.Settings.AntiAFK = decoded.Settings.AntiAFK end
+                if decoded.Settings.UIPosition then
+                    local p = decoded.Settings.UIPosition
+                    Config.Settings.UIPosition = p
+                    mainFrame.Position = UDim2.new(p.X, p.XOffset, p.Y, p.YOffset)
+                end
+            end
+            Notify("Configuración", "Configuración cargada.")
+        else
+            Notify("Error", "Archivo de configuración corrupto.")
+        end
+    else
+        Notify("Configuración", "No hay configuración guardada previa.")
+    end
+end
+
+local keybindBtn = CreateButton(tabSettings, "Keybind: " .. Config.Settings.Keybind.Name, function() end)
+keybindBtn.MouseButton1Click:Connect(function()
+    keybindBtn.Text = "Pulsa cualquier tecla..."
+    local conn
+    conn = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            Config.Settings.Keybind = input.KeyCode
+            keybindBtn.Text = "Keybind: " .. input.KeyCode.Name
+            Notify("Settings", "Keybind actualizado a: " .. input.KeyCode.Name)
+            conn:Disconnect()
+        end
+    end)
 end)
+
+CreateToggle(tabSettings, "Anti AFK", "Settings", "AntiAFK", false)
+
+table.insert(Connections, LocalPlayer.Idled:Connect(function()
+    if Config.Settings.AntiAFK then
+        local vu = game:GetService("VirtualUser")
+        pcall(function()
+            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        end)
+    end
+end))
+
+CreateButton(tabSettings, "SaveConfig", SaveConfiguration)
+CreateButton(tabSettings, "LoadConfig", LoadConfiguration)
 
 CreateButton(tabSettings, "Unlink HkStudio (Panic)", function()
     Unloaded = true
     for _, con in pairs(Connections) do pcall(function() con:Disconnect() end) end
-    for p, _ in pairs(PlayerConnections) do CleanupPlayerConnections(p) end
-    
+    for _, playerConns in pairs(PlayerConnections) do
+        for _, con in pairs(playerConns) do pcall(function() con:Disconnect() end) end
+    end
     pcall(function() hkGui:Destroy() end)
-    Lighting.Ambient = OriginalLighting.Ambient
-    Lighting.Brightness = OriginalLighting.Brightness
-    Lighting.GlobalShadows = OriginalLighting.GlobalShadows
-
-    if _G.HkFovCircle then _G.HkFovCircle:Remove() end
+    for _, p in pairs(Players:GetPlayers()) do
+        pcall(function() if p.Character and p.Character:FindFirstChild("HkChams") then p.Character.HkChams:Destroy() end end)
+    end
+    pcall(function() if _G.HkFovCircle then _G.HkFovCircle:Remove() end end)
     for _, esp in pairs(_G.HkDrawingCache or {}) do
-        if esp.Box then esp.Box:Remove() end
-        if esp.Tracer then esp.Tracer:Remove() end
-        if esp.Name then esp.Name:Remove() end
-        if esp.Dist then esp.Dist:Remove() end
-        for _, line in pairs(esp.Skeleton or {}) do line:Remove() end
-    end
-    table_clear(CharacterCache)
-    Notify("Panic", "Desvinculación y limpieza total ejecutada.")
-end)
-
-Tabs["Aimbot"].Button.TextColor3 = ThemeColor
-Tabs["Aimbot"].Indicator.Visible = true
-Tabs["Aimbot"].Frame.Visible = true
-activeTab = Tabs["Aimbot"]
-
--- Arrastre de UI Principal
-local dragToggle, dragStart, startPos
-table_insert(Connections, mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = true; dragStart = input.Position; startPos = mainFrame.Position end
-end))
-table_insert(Connections, UserInputService.InputChanged:Connect(function(input)
-    if dragToggle and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end))
-table_insert(Connections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragToggle = false end end))
-
-table_insert(Connections, UserInputService.InputBegan:Connect(function(input, gpe)
-    if not gpe and input.KeyCode == Config.Settings.Keybind then mainFrame.Visible = not mainFrame.Visible end
-end))
-
--- ==========================================
--- 8. DRAWING PIPELINE, STATS & BUCLES V5.2 RESTORED
--- ==========================================
-if hasDrawing then
-    _G.HkFovCircle = Drawing.new("Circle")
-    _G.HkFovCircle.Thickness = 1
-    _G.HkFovCircle.Color = Color3.fromRGB(150, 150, 150)
-    _G.HkFovCircle.Filled = false
-end
-
-_G.HkDrawingCache = {}
-local function GetESP(player)
-    if not hasDrawing then return nil end
-    if not _G.HkDrawingCache[player] then
-        _G.HkDrawingCache[player] = {
-            Box = Drawing.new("Square"), Tracer = Drawing.new("Line"),
-            Name = Drawing.new("Text"), Dist = Drawing.new("Text"),
-            Skeleton = {
-                Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"), 
-                Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line")
-            }
-        }
-        local esp = _G.HkDrawingCache[player]
-        esp.Box.Thickness = 1; esp.Box.Filled = false
-        esp.Tracer.Thickness = 1
-        esp.Name.Size = 14; esp.Name.Center = true; esp.Name.Outline = true
-        esp.Dist.Size = 12; esp.Dist.Center = true; esp.Dist.Outline = true
-        for _, line in pairs(esp.Skeleton) do line.Thickness = 1 end
-    end
-    return _G.HkDrawingCache[player]
-end
-
-local function ClearESP(esp)
-    if not esp then return end
-    if esp.Box then esp.Box.Visible = false end
-    if esp.Tracer then esp.Tracer.Visible = false end
-    if esp.Name then esp.Name.Visible = false end
-    if esp.Dist then esp.Dist.Visible = false end
-    if esp.Skeleton then for _, line in pairs(esp.Skeleton) do line.Visible = false end end
-end
-
-local isAiming = false
-local lockedTargetPart = nil
-local currentBestTargetPart = nil
-
-table_insert(Connections, UserInputService.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end end))
-table_insert(Connections, UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false; lockedTargetPart = nil end end))
-
-local frameCount = 0
-local fpsTimer = 0
-local currentFPS = 60
-local currentPing = 0
-
--- ----------------------------------------------------
--- THREAD A: HEARTBEAT (ESP & Stats Monitor)
--- ----------------------------------------------------
-table_insert(Connections, RunService.Heartbeat:Connect(function(dt)
-    if Unloaded then return end
-
-    frameCount = frameCount + 1
-    fpsTimer = fpsTimer + dt
-    if fpsTimer >= 0.5 then
-        currentFPS = math_floor(frameCount / fpsTimer)
-        frameCount = 0
-        fpsTimer = 0
-        
         pcall(function()
-            currentPing = math_floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0)
-        end)
-        
-        if Config.Visuals.ShowStatsHud then
-            topHudLabel.Text = string_format("FPS: %d  |  MS: %dms", currentFPS, currentPing)
-        end
-    end
-    TopStatsHud.Visible = Config.Visuals.ShowStatsHud
-
-    if #ActivePlayersList ~= #Players:GetPlayers() then RefreshActivePlayersList() end
-
-    VisibilityFrameCache = {}
-    local activeColor = Config.Visuals.Rainbow and Color3.fromHSV(os_clock() % 3 / 3, 0.8, 1) or ThemeColor
-    local mousePos = UserInputService:GetMouseLocation()
-    
-    local shortestDist = Config.Aimbot.FOV
-    local bestTarget = nil
-
-    for _, player in ipairs(ActivePlayersList) do
-        if player ~= LocalPlayer then
-            local cache = CharacterCache[player]
-            local esp = GetESP(player)
-            
-            if cache and cache.Character and cache.RootPart and cache.Head and cache.Humanoid then
-                local root = cache.RootPart
-                local head = cache.Head
-                local hum = cache.Humanoid
-                local isTeammate = IsTeammate(player)
-                
-                if cache.Chams then 
-                    cache.Chams.Enabled = Config.Visuals.Chams and not isTeammate 
-                    if not cache.Chams.Enabled and not Config.Visuals.Chams then
-                        pcall(function() cache.Chams:Destroy() end)
-                        cache.Chams = nil
-                    end
-                elseif Config.Visuals.Chams and not isTeammate then
-                    local hl = Instance.new("Highlight", cache.Character)
-                    hl.Name = "HkChams"
-                    hl.FillColor = EnemyColor
-                    cache.Chams = hl
-                end
-
-                if hum.Health > 0 and not isTeammate then
-                    local vector, onScreen = Camera:WorldToViewportPoint(root.Position)
-                    local physDist = math_floor((Camera.CFrame.Position - root.Position).Magnitude)
-
-                    if onScreen and hasDrawing and physDist <= 300 then
-                        local distFromCenter = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
-
-                        if Config.Visuals.Box and esp and esp.Box then
-                            local headV = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-                            local legV = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
-                            local boxH = math_abs(headV.Y - legV.Y)
-                            esp.Box.Size = Vector2.new(boxH * 0.6, boxH)
-                            esp.Box.Position = Vector2.new(headV.X - (esp.Box.Size.X / 2), headV.Y)
-                            esp.Box.Color = activeColor
-                            esp.Box.Visible = true
-                        elseif esp and esp.Box then esp.Box.Visible = false end
-
-                        if Config.Visuals.Tracers and esp and esp.Tracer then
-                            esp.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            esp.Tracer.To = Vector2.new(vector.X, vector.Y)
-                            esp.Tracer.Color = activeColor
-                            esp.Tracer.Visible = true
-                        elseif esp and esp.Tracer then esp.Tracer.Visible = false end
-
-                        if Config.Visuals.Info and esp and esp.Name and esp.Dist then
-                            esp.Name.Text = player.Name
-                            esp.Name.Position = Vector2.new(vector.X, vector.Y - 20)
-                            esp.Name.Color = TextWhite
-                            esp.Name.Visible = true
-                            
-                            local tool = cache.CurrentTool
-                            esp.Dist.Text = tool and (tool.Name .. " ["..physDist.."m]") or "["..physDist.."m]"
-                            esp.Dist.Position = Vector2.new(vector.X, vector.Y + 20)
-                            esp.Dist.Color = tool and EnemyColor or Color3.fromRGB(150,150,150)
-                            esp.Dist.Visible = true
-                        elseif esp and esp.Name and esp.Dist then
-                            esp.Name.Visible = false
-                            esp.Dist.Visible = false
-                        end
-
-                        local targetPartName = Config.Aimbot.TargetPart
-                        local aimPart = (targetPartName == "Head" and head) or root
-                        
-                        if distFromCenter < shortestDist and aimPart then
-                            if IsVisible(aimPart, player) then
-                                shortestDist = distFromCenter
-                                bestTarget = aimPart
-                            end
-                        end
-                    else
-                        ClearESP(esp)
-                    end
-                else
-                    ClearESP(esp)
-                end
-            else
-                ClearESP(esp)
-            end
-        end
-    end
-
-    currentBestTargetPart = bestTarget
-end))
-
--- ----------------------------------------------------
--- THREAD B: RENDERSTEPPED (Aimbot V5.2 Hard-Lock / Pegado como robot)
--- ----------------------------------------------------
-table_insert(Connections, RunService.RenderStepped:Connect(function(dt)
-    if Unloaded then return end
-
-    local mousePos = UserInputService:GetMouseLocation()
-    if hasDrawing and _G.HkFovCircle then
-        _G.HkFovCircle.Position = mousePos
-        _G.HkFovCircle.Radius = Config.Aimbot.FOV
-        _G.HkFovCircle.Visible = Config.Aimbot.Enabled
-    end
-
-    if Config.Aimbot.Enabled and isAiming then
-        if lockedTargetPart then
-            local targetChar = lockedTargetPart.Parent
-            local targetPlayer = targetChar and Players:GetPlayerFromCharacter(targetChar)
-            local cache = targetPlayer and CharacterCache[targetPlayer]
-            
-            if not (cache and cache.Humanoid and cache.Humanoid.Health > 0 and IsVisible(lockedTargetPart, targetPlayer) and not IsTeammate(targetPlayer)) then
-                lockedTargetPart = nil
-            end
-        end
-
-        if not lockedTargetPart then lockedTargetPart = currentBestTargetPart end
-
-        if lockedTargetPart and lockedTargetPart.Parent then
-            local targetChar = lockedTargetPart.Parent
-            local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
-            local cache = targetPlayer and CharacterCache[targetPlayer]
-
-            if cache and cache.Humanoid and targetPlayer then
-                targetNameLbl.Text = targetPlayer.Name
-                local healthPct = math_clamp(cache.Humanoid.Health / cache.Humanoid.MaxHealth, 0, 1)
-                targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
-                targetHealthText.Text = math_floor(cache.Humanoid.Health) .. " HP"
-                TargetHudFrame.Position = UDim2.new(0, mousePos.X + Config.Aimbot.FOV + 15, 0, mousePos.Y - 24)
-                TargetHudFrame.Visible = true
-            end
-
-            local targetPos = lockedTargetPart.Position
-            if Config.Aimbot.Predict and cache and cache.RootPart then
-                local dist = (targetPos - Camera.CFrame.Position).Magnitude
-                targetPos = targetPos + (cache.RootPart.AssemblyLinearVelocity * (dist / 1500))
-            end
-
-            -- BLOQUEO INSTANTÁNEO / HARD-LOCK (V5.2 Original - Pegado como robot)
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-        else
-            TargetHudFrame.Visible = false
-        end
-    else
-        TargetHudFrame.Visible = false
-        lockedTargetPart = nil
-    end
-end))
-
--- ----------------------------------------------------
--- THREAD C: TASK LOOP (TriggerBot con pcall aislado)
--- ----------------------------------------------------
-task.spawn(function()
-    while not Unloaded do
-        task.wait(Config.Aimbot.TriggerDelay)
-        
-        pcall(function()
-            if Config.Aimbot.Enabled and Config.Aimbot.TriggerBot and hasMouseClick then
-                local mousePos = UserInputService:GetMouseLocation()
-                local unitRay = Camera:ScreenPointToRay(mousePos.X, mousePos.Y)
-                
-                TriggerBotRaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-                local rayResult = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, TriggerBotRaycastParams)
-                
-                if rayResult and rayResult.Instance then
-                    local hitChar = rayResult.Instance.Parent
-                    local hitPlayer = hitChar and (Players:GetPlayerFromCharacter(hitChar) or (hitChar.Parent and Players:GetPlayerFromCharacter(hitChar.Parent)))
-                    
-                    if hitPlayer and hitPlayer ~= LocalPlayer then
-                        local cache = CharacterCache[hitPlayer]
-                        if cache and cache.Humanoid and cache.Humanoid.Health > 0 and not IsTeammate(hitPlayer) then
-                            mouse1click()
-                        end
-                    end
-                end
-            end
+            if esp.Box then esp.Box:Remove() end
+            if esp.Tracer then esp.Tracer:Remove() end
+            if esp.NameTag then esp.NameTag:Remove() end
         end)
     end
 end)
+
+-- Toggle Principal UI con Keybind
+table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Config.Settings.Keybind then
+        mainFrame.Visible = not mainFrame.Visible
+    end
+end))
