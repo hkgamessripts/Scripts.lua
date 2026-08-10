@@ -66,6 +66,9 @@ local EspCache = {}
 local Unloaded = false
 local CooldownTable = {}
 
+-- Variable para bloquear el objetivo actual (Sticky Target)
+local lockedTargetPart = nil
+
 -- Caché de FOV Circle (Drawing API)
 local fovCircle = hasDrawing and Drawing.new("Circle") or nil
 if fovCircle then
@@ -1083,45 +1086,61 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT (Con Smoothness 0 por defecto = Cero retraso)
+-- 7. MOTOR DE AIMBOT (Con Sticky Target y TargetHUD condicionado al DrawFOV)
 -- ==========================================
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if not Config.Aimbot.Enabled then
+        lockedTargetPart = nil
         TargetHudFrame.Visible = false
         return
     end
 
     if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        lockedTargetPart = nil
         TargetHudFrame.Visible = false
         return
     end
 
-    local closestTarget = nil
-    local shortestDist = Config.Aimbot.FOV
-    local mousePos = UserInputService:GetMouseLocation()
+    -- Validar si el objetivo bloqueado actual sigue siendo válido (vivo, visible y dentro del juego)
+    if lockedTargetPart then
+        local char = lockedTargetPart.Parent
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not humanoid or humanoid.Health <= 0 or not IsVisible(lockedTargetPart) then
+            lockedTargetPart = nil -- Se murió o se interpuso una pared, liberamos el lock
+        end
+    end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and not IsTeammate(player) then
-            local char = player.Character
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if char and humanoid and humanoid.Health > 0 then
-                local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart) or char:FindFirstChild("Head")
-                if targetPart and IsVisible(targetPart) then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                        if dist < shortestDist then
-                            shortestDist = dist
-                            closestTarget = targetPart
+    -- Si no hay objetivo bloqueado, buscamos uno nuevo dentro del FOV
+    if not lockedTargetPart then
+        local closestTarget = nil
+        local shortestDist = Config.Aimbot.FOV
+        local mousePos = UserInputService:GetMouseLocation()
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and not IsTeammate(player) then
+                local char = player.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if char and humanoid and humanoid.Health > 0 then
+                    local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart) or char:FindFirstChild("Head")
+                    if targetPart and IsVisible(targetPart) then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                            if dist < shortestDist then
+                                shortestDist = dist
+                                closestTarget = targetPart
+                            end
                         end
                     end
                 end
             end
         end
+        lockedTargetPart = closestTarget
     end
 
-    if closestTarget then
-        local targetChar = closestTarget.Parent
+    -- Si tenemos un objetivo asegurado (lock activo)
+    if lockedTargetPart then
+        local targetChar = lockedTargetPart.Parent
         local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
         if humanoid then
             local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
@@ -1129,11 +1148,11 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
             targetHealthText.Text = math.floor(healthPct * 100) .. "%"
             targetNameLbl.Text = targetChar.Name
             
-            -- LÓGICA AGREGADA: Solo mostramos el TargetHUD si el círculo DrawFOV está activado.
+            -- El Target HUD solo se muestra si el Aimbot está activo Y el círculo (DrawFOV) está habilitado
             TargetHudFrame.Visible = Config.Aimbot.DrawFOV
         end
 
-        local targetPos = closestTarget.Position
+        local targetPos = lockedTargetPart.Position
         local currentCFrame = Camera.CFrame
         local targetCFrame = CFrame.new(currentCFrame.Position, targetPos)
         
