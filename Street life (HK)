@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.9 (Professional Edition + Street Life & Target Fix)
+    HKSTUDIO ELITE HUB - V5.9.3 (Professional Edition + Street Life & Target Fix)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -437,6 +437,7 @@ local function CreateTab(icon, name)
     scroll.ScrollBarThickness = 3
     scroll.ScrollBarImageColor3 = CurrentThemeColor
     scroll.Visible = false
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Habilita clics en elementos inferiores
 
     local grid = Instance.new("UIGridLayout", scroll)
     grid.CellSize = UDim2.new(0.48, 0, 0, 48)
@@ -714,7 +715,7 @@ CreateToggle(tabAimbot, "Draw FOV", "Aimbot", "DrawFOV", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
 
--- Selector de Target corregido y sincronizado (Head -> HumanoidRootPart -> Torso)
+-- Selector de Target corregido y sincronizado
 local targetPartsList = {"Head", "HumanoidRootPart", "UpperTorso"}
 local targetIndex = 1
 for i, v in ipairs(targetPartsList) do
