@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.8 (Professional Edition + Bank & Deposit System)
+    HKSTUDIO ELITE HUB - V5.9 (Professional Edition + Street Life)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -21,6 +21,30 @@ local Camera = workspace.CurrentCamera
 local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
 local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 
+-- Referencias del Cajero Remoto (Street Life)
+local ATM = nil
+pcall(function()
+    ATM = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ATM")
+end)
+
+local Data, Money, Bank
+pcall(function()
+    Data = LocalPlayer:WaitForChild("Data")
+    Money = Data:WaitForChild("Money")
+    Bank = Data:WaitForChild("Bank")
+end)
+
+local function formatNumber(n)
+    n = tonumber(n) or 0
+    local formatted = tostring(math.floor(n))
+    while true do
+        local s, count = string.gsub(formatted, "^(-?%d+)(%d%d%d)", "%1,%2")
+        if count == 0 then break end
+        formatted = s
+    end
+    return formatted
+end
+
 -- ==========================================
 -- 1. CONFIGURACIÓN Y CACHÉ GLOBAL (Smoothness por defecto en 0)
 -- ==========================================
@@ -31,7 +55,7 @@ local Config = {
         WallCheck = true, 
         TeamCheck = true, 
         TargetPart = "Head", 
-        Smoothness = 0, -- Sin suavidad por defecto (cero delay)
+        Smoothness = 0, 
         FOV = 150
     },
     Visuals = { 
@@ -48,10 +72,6 @@ local Config = {
         BoostFPS = false, 
         FakeKorblox = false, 
         FakeHeadless = false 
-    },
-    Bank = {
-        AutoDeposit = false,
-        DepositAmount = 10000,
     },
     Settings = { 
         Keybind = Enum.KeyCode.RightShift,
@@ -71,10 +91,8 @@ local EspCache = {}
 local Unloaded = false
 local CooldownTable = {}
 
--- Variable para bloquear el objetivo actual (Sticky Target)
 local lockedTargetPart = nil
 
--- Caché de FOV Circle (Drawing API)
 local fovCircle = hasDrawing and Drawing.new("Circle") or nil
 if fovCircle then
     fovCircle.Visible = false
@@ -84,7 +102,6 @@ if fovCircle then
     fovCircle.NumSides = 64
 end
 
--- Cachés de mapa y rendimiento
 local OriginalLighting = {
     Ambient = Lighting.Ambient,
     Brightness = Lighting.Brightness,
@@ -172,7 +189,6 @@ local function Notify(title, text)
     end)
 end
 
--- Target Info HUD
 local TargetHudFrame = Instance.new("Frame", hkGui)
 TargetHudFrame.Size = UDim2.new(0, 180, 0, 46)
 TargetHudFrame.Position = UDim2.new(0.5, -90, 0.62, 0)
@@ -378,7 +394,7 @@ logo.BackgroundTransparency = 1
 logo.TextColor3 = CurrentThemeColor
 logo.Font = Enum.Font.GothamBlack
 logo.TextSize = 22
-logo.Text = "Street life"
+logo.Text = "HkStudio"
 
 local tabContainer = Instance.new("Frame", sidebar)
 tabContainer.Size = UDim2.new(1, -24, 1, -75)
@@ -487,7 +503,6 @@ local function CreateToggle(parent, text, configCat, configKey, isMasterAction, 
     end)
 end
 
--- Slider Global con "bolita" (knob)
 local ActiveSlider = nil
 table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
     if ActiveSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -622,13 +637,76 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
     end)
 end
 
+-- Función auxiliar para las opciones de Retirar / Depositar de Street Life
+local function CreateAtmBox(parent, placeholder, btnText, btnColor, actionType)
+    local base = Instance.new("Frame", parent)
+    base.BackgroundColor3 = BgLight
+    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 8)
+    
+    local input = Instance.new("TextBox", base)
+    input.Size = UDim2.new(0.58, 0, 1, -12)
+    input.Position = UDim2.new(0, 6, 0, 6)
+    input.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    input.TextColor3 = TextWhite
+    input.Font = Enum.Font.Gotham
+    input.TextSize = 12
+    input.PlaceholderText = placeholder
+    input.Text = ""
+    input.ClearTextOnFocus = false
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
+
+    local btn = Instance.new("TextButton", base)
+    btn.Size = UDim2.new(0.38, 0, 1, -12)
+    btn.Position = UDim2.new(0.6, 2, 0, 6)
+    btn.BackgroundColor3 = btnColor
+    btn.TextColor3 = TextWhite
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Text = btnText
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        local amount = tonumber(input.Text)
+        if not amount or amount <= 0 then
+            Notify("Street Life", "Introduce un monto valido")
+            return
+        end
+        
+        if actionType == "Deposit" then
+            if Money and amount > Money.Value then
+                Notify("Street Life", "No tienes ese saldo en la cartera")
+                return
+            end
+            if ATM then
+                ATM:FireServer("Deposit", math.floor(amount))
+                input.Text = ""
+                Notify("Street Life", "Depositando $" .. formatNumber(amount) .. "...")
+            else
+                Notify("Street Life", "RemoteEvent ATM no encontrado")
+            end
+        elseif actionType == "Withdraw" then
+            if Bank and amount > Bank.Value then
+                Notify("Street Life", "No tienes ese saldo en el banco")
+                return
+            end
+            if ATM then
+                ATM:FireServer("Withdraw", math.floor(amount))
+                input.Text = ""
+                Notify("Street Life", "Retirando $" .. formatNumber(amount) .. "...")
+            else
+                Notify("Street Life", "RemoteEvent ATM no encontrado")
+            end
+        end
+    end)
+end
+
 -- ==========================================
 -- 5. CONSTRUCCIÓN DE PESTAÑAS
 -- ==========================================
 local tabAimbot = CreateTab("🎯", "Aimbot")
 local tabVisuals = CreateTab("👁️", "Visuals")
 local tabLocal = CreateTab("🏃", "Local")
-local tabBank = CreateTab("🏦", "Banco")
+local tabStreetLife = CreateTab("🏦", "Street Life")
 local tabSettings = CreateTab("⚙️", "Settings")
 
 -- Aimbot Tab
@@ -783,62 +861,9 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     end
 )
 
--- Banco / Depósito Tab (Lógica integrada con notificaciones y eventos remotos)
-CreateToggle(tabBank, "Auto-Deposit", "Bank", "AutoDeposit", true, function(state)
-    if state then
-        task.spawn(function()
-            while Config.Bank.AutoDeposit and not Unloaded do
-                pcall(function()
-                    for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-                        if v:IsA("RemoteEvent") and (v.Name:lower():find("deposit") or v.Name:lower():find("banco") or v.Name:lower():find("bank")) then
-                            v:FireServer(Config.Bank.DepositAmount)
-                            break
-                        end
-                    end
-                end)
-                task.wait(4)
-            end
-        end)
-    end
-end)
-
-CreateSlider(tabBank, "Monto Depósito", "Bank", "DepositAmount", 1000, 100000)
-
-CreateButton(tabBank, "Depositar Ahora", function()
-    local success = false
-    pcall(function()
-        for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-            if v:IsA("RemoteEvent") and (v.Name:lower():find("deposit") or v.Name:lower():find("banco") or v.Name:lower():find("bank")) then
-                v:FireServer(Config.Bank.DepositAmount)
-                success = true
-                break
-            end
-        end
-    end)
-    if success then
-        Notify("Banco", "Depósito de $" .. Config.Bank.DepositAmount .. " ejecutado.")
-    else
-        Notify("Banco", "No se encontró evento de depósito remoto.")
-    end
-end)
-
-CreateButton(tabBank, "Retirar Todo", function()
-    local success = false
-    pcall(function()
-        for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-            if v:IsA("RemoteEvent") and (v.Name:lower():find("withdraw") or v.Name:lower():find("retirar")) then
-                v:FireServer("WithdrawAll")
-                success = true
-                break
-            end
-        end
-    end)
-    if success then
-        Notify("Banco", "Retiro ejecutado correctamente.")
-    else
-        Notify("Banco", "No se encontró evento de retiro remoto.")
-    end
-end)
+-- Street Life Tab (Opciones de Retirar y Depositar con la lógica del cajero remoto)
+CreateAtmBox(tabStreetLife, "Monto a retirar", "Retirar", Color3.fromRGB(180, 80, 50), "Withdraw")
+CreateAtmBox(tabStreetLife, "Monto a depositar", "Depositar", Color3.fromRGB(50, 180, 80), "Deposit")
 
 -- Settings Tab
 CreateButton(tabSettings, "Guardar Config", function()
@@ -882,20 +907,16 @@ CreateToggle(tabSettings, "Anti-AFK", "Settings", "AntiAFK", true, function(stat
     end
 end)
 
--- Botón Unlink con limpieza absoluta y rigurosa
 CreateButton(tabSettings, "Unlink", function()
     Unloaded = true
     
-    -- Destruir FOV circle
     if fovCircle then pcall(function() fovCircle:Remove() end) end
 
-    -- Desconectar conexiones
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
     end
     table.clear(Connections)
     
-    -- Limpiar ESP y Chams en todos los jugadores
     for player, esp in pairs(EspCache) do
         pcall(function()
             if esp.Box then esp.Box:Remove() end
@@ -912,7 +933,6 @@ CreateButton(tabSettings, "Unlink", function()
     end
     table.clear(EspCache)
 
-    -- Restaurar iluminación y mapa
     pcall(function()
         Lighting.Ambient = OriginalLighting.Ambient
         Lighting.Brightness = OriginalLighting.Brightness
@@ -935,7 +955,6 @@ CreateButton(tabSettings, "Unlink", function()
     end
     table.clear(OriginalTextureTransparencies)
 
-    -- Restaurar personaje local si tenía Korblox/Headless
     if LocalPlayer.Character then
         for pName, trans in pairs(OriginalTransparencies) do
             local p = LocalPlayer.Character:FindFirstChild(pName)
@@ -948,7 +967,6 @@ CreateButton(tabSettings, "Unlink", function()
         end
     end
 
-    -- Destruir GUI principal
     pcall(function() hkGui:Destroy() end)
 end)
 
@@ -1149,7 +1167,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 end))
 
 -- ==========================================
--- 7. MOTOR DE AIMBOT (Con Sticky Target y TargetHUD condicionado al DrawFOV)
+-- 7. MOTOR DE AIMBOT
 -- ==========================================
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     if not Config.Aimbot.Enabled then
@@ -1207,7 +1225,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
             targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
             targetHealthText.Text = math.floor(healthPct * 100) .. "%"
             targetNameLbl.Text = targetChar.Name
-            
             TargetHudFrame.Visible = Config.Aimbot.DrawFOV
         end
 
