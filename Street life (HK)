@@ -394,7 +394,7 @@ logo.BackgroundTransparency = 1
 logo.TextColor3 = CurrentThemeColor
 logo.Font = Enum.Font.GothamBlack
 logo.TextSize = 22
-logo.Text = "HkStudio"
+logo.Text = "Street life"
 
 local tabContainer = Instance.new("Frame", sidebar)
 tabContainer.Size = UDim2.new(1, -24, 1, -75)
