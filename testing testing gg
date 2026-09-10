@@ -1,5 +1,5 @@
---[[
-    HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 3-Column Layout)
+[source: 1]--[[
+    HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 4-Column Layout)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -77,7 +77,7 @@ local Config = {
     Settings = { 
         Keybind = Enum.KeyCode.RightShift,
         AntiAFK = false,
-        UIPosition = {X = 0.5, XOffset = -350, Y = 0.5, YOffset = -220}
+        UIPosition = {X = 0.5, XOffset = -480, Y = 0.5, YOffset = -240}
     }
 }
 
@@ -371,10 +371,10 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. CONSTRUCCIÓN DE LA INTERFAZ (Ventana más ancha para 3 columnas)
+-- 4. CONSTRUCCIÓN DE LA INTERFAZ (Ventana ancha optimizada para 4 columnas)
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
-mainFrame.Size = UDim2.new(0, 760, 0, 450)
+mainFrame.Size = UDim2.new(0, 960, 0, 480)
 mainFrame.Position = UDim2.new(Config.Settings.UIPosition.X, Config.Settings.UIPosition.XOffset, Config.Settings.UIPosition.Y, Config.Settings.UIPosition.YOffset)
 mainFrame.BackgroundColor3 = BgDark
 mainFrame.Visible = false
@@ -875,7 +875,7 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
 )
 
 -- ==========================================
--- STREET LIFE: ATM + 3 COLUMNAS LIMPIAS (Armas, Balas, Comerciante Ilegal)
+-- STREET LIFE: ATM + 4 COLUMNAS (Armas, Balas, Mercancía, Máscaras)
 -- ==========================================
 
 -- 1. Fila de ATM (Retirar y Depositar)
@@ -891,13 +891,13 @@ atmGrid.SortOrder = Enum.SortOrder.LayoutOrder
 CreateAtmBox(atmRow, "Monto a retirar", "Retirar", Color3.fromRGB(180, 80, 50), "Withdraw")
 CreateAtmBox(atmRow, "Monto a depositar", "Depositar", Color3.fromRGB(50, 180, 80), "Deposit")
 
--- 2. Fila de Tiendas Remotas en 3 Columnas Perfectas
+-- 2. Fila de Tiendas Remotas en 4 Columnas Perfectas
 local shopRow = Instance.new("Frame", tabStreetLife)
-shopRow.Size = UDim2.new(1, 0, 0, 305)
+shopRow.Size = UDim2.new(1, 0, 0, 320)
 shopRow.BackgroundTransparency = 1
 
 local shopGrid = Instance.new("UIGridLayout", shopRow)
-shopGrid.CellSize = UDim2.new(0.32, 0, 1, 0)
+shopGrid.CellSize = UDim2.new(0.238, 0, 1, 0)
 shopGrid.CellPadding = UDim2.new(0, 8, 0, 0)
 shopGrid.SortOrder = Enum.SortOrder.LayoutOrder
 
@@ -907,28 +907,28 @@ local function CreateShopSection(parent, titleText)
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
     
     local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(0.55, 0, 0, 30)
-    title.Position = UDim2.new(0, 8, 0, 4)
+    title.Size = UDim2.new(0.52, 0, 0, 30)
+    title.Position = UDim2.new(0, 6, 0, 4)
     title.BackgroundTransparency = 1
     title.Text = titleText
     title.TextColor3 = CurrentThemeColor
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 11
+    title.TextSize = 10
     title.TextXAlignment = Enum.TextXAlignment.Left
     
     local refBtn = Instance.new("TextButton", frame)
-    refBtn.Size = UDim2.new(0, 62, 0, 22)
-    refBtn.Position = UDim2.new(1, -66, 0, 6)
+    refBtn.Size = UDim2.new(0, 52, 0, 22)
+    refBtn.Position = UDim2.new(1, -56, 0, 6)
     refBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
     refBtn.TextColor3 = TextWhite
     refBtn.Font = Enum.Font.GothamBold
-    refBtn.TextSize = 10
+    refBtn.TextSize = 9
     refBtn.Text = "Refrescar"
     Instance.new("UICorner", refBtn).CornerRadius = UDim.new(0, 4)
     
     local sf = Instance.new("ScrollingFrame", frame)
-    sf.Size = UDim2.new(1, -12, 1, -38)
-    sf.Position = UDim2.new(0, 6, 0, 34)
+    sf.Size = UDim2.new(1, -10, 1, -38)
+    sf.Position = UDim2.new(0, 5, 0, 34)
     sf.BackgroundTransparency = 1
     sf.ScrollBarThickness = 3
     sf.ScrollBarImageColor3 = CurrentThemeColor
@@ -948,9 +948,10 @@ local function CreateShopSection(parent, titleText)
     return frame, sf, refBtn
 end
 
-local weaponsFrame, weaponsScroll, weaponsRefBtn = CreateShopSection(shopRow, "ARMAS")
-local bulletsFrame, bulletsScroll, bulletsRefBtn = CreateShopSection(shopRow, "BALAS")
-local illegalFrame, illegalScroll, illegalRefBtn = CreateShopSection(shopRow, "ILEGAL & MÁS.")
+local weaponsFrame, weaponsScroll, weaponsRefBtn = CreateShopSection(shopRow, "ARMAS REMOTAS")
+local bulletsFrame, bulletsScroll, bulletsRefBtn = CreateShopSection(shopRow, "BALAS REMOTAS")
+local mercFrame, mercScroll, mercRefBtn = CreateShopSection(shopRow, "MERCANCÍA")
+local maskFrame, maskScroll, maskRefBtn = CreateShopSection(shopRow, "MÁSCARAS")
 
 -- Lógica de escaneo y compra de Armas y Balas
 local scannedItems = {Weapons = {}, Bullets = {}}
@@ -982,34 +983,34 @@ local function createItemButton(scrollingFrame, itemName, price, isBullet)
     btnCorner.Parent = btn
 
     local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(0.44, 0, 1, 0)
-    nameLabel.Position = UDim2.new(0, 6, 0, 0)
+    nameLabel.Size = UDim2.new(0.42, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 4, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = itemName
     nameLabel.TextColor3 = TextWhite
     nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 10
+    nameLabel.TextSize = 9
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.Parent = btn
 
     local priceLabel = Instance.new("TextLabel")
-    priceLabel.Size = UDim2.new(0.26, 0, 1, 0)
-    priceLabel.Position = UDim2.new(0.44, 0, 0, 0)
+    priceLabel.Size = UDim2.new(0.28, 0, 1, 0)
+    priceLabel.Position = UDim2.new(0.42, 0, 0, 0)
     priceLabel.BackgroundTransparency = 1
     priceLabel.Text = "$" .. formatNumber(price)
     priceLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
     priceLabel.Font = Enum.Font.GothamBold
-    priceLabel.TextSize = 10
+    priceLabel.TextSize = 9
     priceLabel.TextXAlignment = Enum.TextXAlignment.Left
     priceLabel.Parent = btn
 
     local buyBtn = Instance.new("TextButton")
-    buyBtn.Size = UDim2.new(0, 48, 0, 24)
-    buyBtn.Position = UDim2.new(1, -52, 0.5, -12)
+    buyBtn.Size = UDim2.new(0, 42, 0, 22)
+    buyBtn.Position = UDim2.new(1, -44, 0.5, -11)
     buyBtn.BackgroundColor3 = isBullet and Color3.fromRGB(45, 130, 160) or Color3.fromRGB(45, 160, 75)
     buyBtn.TextColor3 = TextWhite
     buyBtn.Font = Enum.Font.GothamBold
-    buyBtn.TextSize = 9
+    buyBtn.TextSize = 8
     buyBtn.Text = "Comprar"
     buyBtn.Parent = btn
 
@@ -1165,7 +1166,7 @@ bulletsRefBtn.MouseButton1Click:Connect(function()
     scanStore(bulletsScroll, true)
 end)
 
--- ========== COMERCIANTE ILEGAL & MÁSCARAS ==========
+-- ========== MERCANCÍA REMOTA Y MÁSCARAS REMOTAS (2 Columnas Separadas) ==========
 local MERCHANT_ITEMS = {
     {name = "MentosBag", display = "Mentos", price = 300},
     {name = "Blank", display = "Fogueo", price = 1000},
@@ -1189,72 +1190,59 @@ local MASK_ITEMS = {
     {name = "JasonMask", display = "Jason", price = 100},
 }
 
-local illegalButtons = {}
-local illegalScanned = {}
-local illegalOrder = 0
+local mercButtons = {}
+local maskButtons = {}
 
-local function clearIllegalList()
-    for _, btn in ipairs(illegalButtons) do btn:Destroy() end
-    illegalButtons = {}
-    illegalScanned = {}
-    illegalOrder = 0
+local function clearMercLists()
+    for _, btn in ipairs(mercButtons) do btn:Destroy() end
+    mercButtons = {}
+    for _, btn in ipairs(maskButtons) do btn:Destroy() end
+    maskButtons = {}
 end
 
-local function createIllegalButton(itemName, displayName, price, category)
-    if illegalScanned[itemName] then return end
-    illegalScanned[itemName] = true
-    illegalOrder = illegalOrder + 1
+local function createGenericStoreItem(scrollingFrame, itemName, displayName, price, buttonList)
+    local order = #scrollingFrame:GetChildren()
 
     local btn = Instance.new("Frame")
     btn.Size = UDim2.new(1, 0, 0, 36)
     btn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
     btn.BorderSizePixel = 0
-    btn.LayoutOrder = illegalOrder
-    btn.Parent = illegalScroll
+    btn.LayoutOrder = order
+    btn.Parent = scrollingFrame
 
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = btn
 
-    local catLabel = Instance.new("TextLabel")
-    catLabel.Size = UDim2.new(0, 35, 1, 0)
-    catLabel.Position = UDim2.new(0, 3, 0, 0)
-    catLabel.BackgroundTransparency = 1
-    catLabel.Text = category
-    catLabel.TextColor3 = (category == "MERC" and Color3.fromRGB(255, 150, 100)) or Color3.fromRGB(200, 150, 255)
-    catLabel.Font = Enum.Font.GothamBold
-    catLabel.TextSize = 8
-    catLabel.Parent = btn
-
     local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(0.38, 0, 1, 0)
-    nameLabel.Position = UDim2.new(0, 36, 0, 0)
+    nameLabel.Size = UDim2.new(0.44, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 6, 0, 0)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = displayName
     nameLabel.TextColor3 = TextWhite
     nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 10
+    nameLabel.TextSize = 9
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.Parent = btn
 
     local priceLabel = Instance.new("TextLabel")
-    priceLabel.Size = UDim2.new(0.24, 0, 1, 0)
+    priceLabel.Size = UDim2.new(0.28, 0, 1, 0)
     priceLabel.Position = UDim2.new(0.44, 0, 0, 0)
     priceLabel.BackgroundTransparency = 1
     priceLabel.Text = "$" .. formatNumber(price)
     priceLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
     priceLabel.Font = Enum.Font.GothamBold
-    priceLabel.TextSize = 10
+    priceLabel.TextSize = 9
     priceLabel.TextXAlignment = Enum.TextXAlignment.Left
     priceLabel.Parent = btn
 
     local buyBtn = Instance.new("TextButton")
-    buyBtn.Size = UDim2.new(0, 48, 0, 24)
-    buyBtn.Position = UDim2.new(1, -52, 0.5, -12)
+    buyBtn.Size = UDim2.new(0, 42, 0, 22)
+    buyBtn.Position = UDim2.new(1, -44, 0.5, -11)
     buyBtn.BackgroundColor3 = Color3.fromRGB(160, 50, 50)
     buyBtn.TextColor3 = TextWhite
     buyBtn.Font = Enum.Font.GothamBold
-    buyBtn.TextSize = 9
+    buyBtn.TextSize = 8
     buyBtn.Text = "Comprar"
     buyBtn.Parent = btn
 
@@ -1271,22 +1259,27 @@ local function createIllegalButton(itemName, displayName, price, category)
         end
     end)
 
-    table.insert(illegalButtons, btn)
+    table.insert(buttonList, btn)
 end
 
-local function loadIllegalItems()
-    clearIllegalList()
+local function loadMerchantAndMasks()
+    clearMercLists()
     for _, item in ipairs(MERCHANT_ITEMS) do
-        createIllegalButton(item.name, item.display, item.price, "MERC")
+        createGenericStoreItem(mercScroll, item.name, item.display, item.price, mercButtons)
     end
     for _, item in ipairs(MASK_ITEMS) do
-        createIllegalButton(item.name, item.display, item.price, "MASK")
+        createGenericStoreItem(maskScroll, item.name, item.display, item.price, maskButtons)
     end
 end
 
-illegalRefBtn.MouseButton1Click:Connect(function()
-    loadIllegalItems()
-    Notify("Street Life", "Comerciante Ilegal actualizado.")
+mercRefBtn.MouseButton1Click:Connect(function()
+    loadMerchantAndMasks()
+    Notify("Street Life", "Mercancía actualizada.")
+end)
+
+maskRefBtn.MouseButton1Click:Connect(function()
+    loadMerchantAndMasks()
+    Notify("Street Life", "Máscaras actualizadas.")
 end)
 
 -- Escaneo automático inicial al cargar el script
@@ -1294,7 +1287,7 @@ task.spawn(function()
     task.wait(1)
     scanStore(weaponsScroll, false)
     scanStore(bulletsScroll, true)
-    loadIllegalItems()
+    loadMerchantAndMasks()
 end)
 
 -- ==========================================
