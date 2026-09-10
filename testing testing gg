@@ -1,0 +1,325 @@
+-- =====================================================================
+-- HKSTUDIO ELITE HUB v5.9 (Integrated Illegal Merchant & Street Life)
+-- =====================================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- Remotes
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+local Buy = Remotes and Remotes:FindFirstChild("Buy")
+local GunBuy = Remotes and Remotes:FindFirstChild("GunBuy")
+local BulletBuy = Remotes and Remotes:FindFirstChild("BulletBuy")
+local ATM = Remotes and Remotes:FindFirstChild("ATM")
+
+-- Data
+local Data = LocalPlayer:FindFirstChild("Data") or LocalPlayer:WaitForChild("Data", 10)
+local Money = Data and (Data:FindFirstChild("Money") or Data:WaitForChild("Money", 10))
+
+-- ========== LISTAS HARDCODEADAS (STREET LIFE & MERCHANT) ==========
+local MERCHANT_ITEMS = {
+    {name = "MentosBag", display = "Bolsa de Mentos", price = 300},
+    {name = "Blank", display = "Cartucho Fogueo", price = 1000},
+    {name = "C4", display = "C4", price = 2000},
+    {name = "Bat", display = "Bate", price = 750},
+    {name = "Knife", display = "Cuchillo", price = 500},
+    {name = "DuffleBag", display = "Maleta", price = 500},
+    {name = "LockPick", display = "Ganzúa", price = 500},
+    {name = "Firework", display = "Petardo", price = 500},
+}
+
+local MASK_ITEMS = {
+    {name = "Balaclava", display = "Pasamontañas", price = 50},
+    {name = "SkiMask", display = "Pasamontañas de Esquí", price = 50},
+    {name = "Bandana", display = "Bandana", price = 50},
+    {name = "HackerMask", display = "Máscara de Hacker", price = 75},
+    {name = "BlueSki", display = "Esquí Azul", price = 75},
+    {name = "RedSki", display = "Esquí Rojo", price = 75},
+    {name = "ClownMask", display = "Máscara de Payaso", price = 75},
+    {name = "GhostFace", display = "Cara Fantasma", price = 100},
+    {name = "JasonMask", display = "Máscara de Jason", price = 100},
+}
+
+local GUN_ITEMS = {
+    {name = "Pistol", display = "Pistola Básica", price = 2500},
+    {name = "Shotgun", display = "Escopeta", price = 6000},
+    {name = "Rifle", display = "Rifle de Asalto", price = 12000},
+}
+
+local AMMO_ITEMS = {
+    {name = "PistolAmmo", display = "Munición Pistola", price = 300},
+    {name = "ShotgunAmmo", display = "Munición Escopeta", price = 500},
+    {name = "RifleAmmo", display = "Munición Rifle", price = 800},
+}
+
+-- ========== UTILIDADES ==========
+local function formatNumber(n)
+    n = tonumber(n) or 0
+    local s = tostring(math.floor(n))
+    while true do
+        local r, c = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2")
+        if c == 0 then break end
+        s = r
+    end
+    return s
+end
+
+-- ========== GUI PRINCIPAL HKSTUDIO ELITE HUB ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "HkStudioEliteHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Enabled = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local MainPanel = Instance.new("Frame")
+MainPanel.Size = UDim2.new(0, 560, 0, 620)
+MainPanel.Position = UDim2.new(0.5, -280, 0.5, -310)
+MainPanel.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+MainPanel.BorderSizePixel = 0
+MainPanel.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainPanel
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(70, 70, 100)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainPanel
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 45)
+Title.BackgroundTransparency = 1
+Title.Text = "HKSTUDIO ELITE HUB v5.9"
+Title.TextColor3 = Color3.fromRGB(255, 120, 120)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.Parent = MainPanel
+
+-- Cartera Global
+local GlobalMoney = Instance.new("TextLabel")
+GlobalMoney.Size = UDim2.new(0.9, 0, 0, 20)
+GlobalMoney.Position = UDim2.new(0.05, 0, 0, 45)
+GlobalMoney.BackgroundTransparency = 1
+GlobalMoney.Text = "Cartera: $0"
+GlobalMoney.TextColor3 = Color3.fromRGB(100, 255, 100)
+GlobalMoney.Font = Enum.Font.GothamSemibold
+GlobalMoney.TextSize = 13
+GlobalMoney.TextXAlignment = Enum.TextXAlignment.Left
+GlobalMoney.Parent = MainPanel
+
+-- Contenedor de Listas (ScrollingFrame unificado para Street Life / Comerciante)
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(0.9, 0, 0, 470)
+ScrollingFrame.Position = UDim2.new(0.05, 0, 0, 75)
+ScrollingFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+ScrollingFrame.BorderSizePixel = 0
+ScrollingFrame.ScrollBarThickness = 5
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScrollingFrame.Parent = MainPanel
+
+local ScrollCorner = Instance.new("UICorner")
+ScrollCorner.CornerRadius = UDim.new(0, 8)
+ScrollCorner.Parent = ScrollingFrame
+
+local ItemLayout = Instance.new("UIListLayout")
+ItemLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ItemLayout.Padding = UDim.new(0, 5)
+ItemLayout.Parent = ScrollingFrame
+
+local ItemPadding = Instance.new("UIPadding")
+ItemPadding.PaddingTop = UDim.new(0, 6)
+ItemPadding.PaddingBottom = UDim.new(0, 6)
+ItemPadding.PaddingLeft = UDim.new(0, 6)
+ItemPadding.PaddingRight = UDim.new(0, 6)
+ItemPadding.Parent = ScrollingFrame
+
+-- Status e Info inferior
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
+StatusLabel.Position = UDim2.new(0.05, 0, 0, 555)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Toggle UI: Right Shift"
+StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 12
+StatusLabel.Parent = MainPanel
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0.9, 0, 0, 28)
+CloseBtn.Position = UDim2.new(0.05, 0, 0, 580)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 35)
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 13
+CloseBtn.Text = "Ocultar Panel (Right Shift)"
+CloseBtn.Parent = MainPanel
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- ========== ACTUALIZAR DATOS DE DINERO ==========
+local function updateMoneyLabels()
+    if Money then
+        GlobalMoney.Text = "Cartera: $" .. formatNumber(Money.Value)
+    end
+end
+if Money then
+    Money.Changed:Connect(updateMoneyLabels)
+    updateMoneyLabels()
+end
+
+local function showStatus(msg, color)
+    StatusLabel.Text = msg
+    StatusLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    task.delay(3, function()
+        if StatusLabel.Text == msg then StatusLabel.Text = "Toggle UI: Right Shift" end
+    end)
+end
+
+-- ========== CONSTRUCTOR DE ELEMENTOS EN UI ==========
+local itemButtons = {}
+local orderCounter = 0
+
+local function clearItemList()
+    for _, btn in ipairs(itemButtons) do btn:Destroy() end
+    itemButtons = {}
+    orderCounter = 0
+end
+
+local function createShopButton(itemName, displayName, price, category, remoteType)
+    orderCounter = orderCounter + 1
+
+    local btn = Instance.new("Frame")
+    btn.Size = UDim2.new(1, 0, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 22, 30)
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = orderCounter
+    btn.Parent = ScrollingFrame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = btn
+
+    local catLabel = Instance.new("TextLabel")
+    catLabel.Size = UDim2.new(0, 65, 1, 0)
+    catLabel.Position = UDim2.new(0, 4, 0, 0)
+    catLabel.BackgroundTransparency = 1
+    catLabel.Text = category
+    catLabel.TextColor3 = (category == "MERC" and Color3.fromRGB(255, 150, 100)) or 
+                          (category == "MASK" and Color3.fromRGB(200, 150, 255)) or 
+                          Color3.fromRGB(100, 200, 255)
+    catLabel.Font = Enum.Font.GothamBold
+    catLabel.TextSize = 10
+    catLabel.Parent = btn
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0.14, 0, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = displayName
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 13
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = btn
+
+    local priceLabel = Instance.new("TextLabel")
+    priceLabel.Size = UDim2.new(0.2, 0, 1, 0)
+    priceLabel.Position = UDim2.new(0.54, 0, 0, 0)
+    priceLabel.BackgroundTransparency = 1
+    priceLabel.Text = "$" .. formatNumber(price)
+    priceLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    priceLabel.Font = Enum.Font.GothamBold
+    priceLabel.TextSize = 13
+    priceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    priceLabel.Parent = btn
+
+    local buyBtn = Instance.new("TextButton")
+    buyBtn.Size = UDim2.new(0, 75, 0, 28)
+    buyBtn.Position = UDim2.new(1, -83, 0.5, -14)
+    buyBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 45)
+    buyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    buyBtn.Font = Enum.Font.GothamBold
+    buyBtn.TextSize = 12
+    buyBtn.Text = "Comprar"
+    buyBtn.Parent = btn
+
+    local buyCorner = Instance.new("UICorner")
+    buyCorner.CornerRadius = UDim.new(0, 5)
+    buyCorner.Parent = buyBtn
+
+    buyBtn.MouseButton1Click:Connect(function()
+        if remoteType == "Buy" and Buy then
+            Buy:FireServer(itemName, price)
+        elseif remoteType == "GunBuy" and GunBuy then
+            GunBuy:FireServer(itemName)
+        elseif remoteType == "BulletBuy" and BulletBuy then
+            BulletBuy:FireServer(itemName)
+        else
+            showStatus("Error: Remote no disponible", Color3.fromRGB(255, 100, 100))
+            return
+        end
+        showStatus("Comprando " .. displayName .. "...", Color3.fromRGB(100, 255, 100))
+    end)
+
+    table.insert(itemButtons, btn)
+end
+
+-- ========== CARGAR TODO EN EL PANEL ==========
+local function loadAllModules()
+    clearItemList()
+    
+    -- 1. Armas (Street Life)
+    for _, item in ipairs(GUN_ITEMS) do
+        createShopButton(item.name, item.display, item.price, "ARMAS", "GunBuy")
+    end
+    
+    -- 2. Municiones (Street Life)
+    for _, item in ipairs(AMMO_ITEMS) do
+        createShopButton(item.name, item.display, item.price, "MUNICIÓN", "BulletBuy")
+    end
+
+    -- 3. Mercancia (Comerciante Ilegal)
+    for _, item in ipairs(MERCHANT_ITEMS) do
+        createShopButton(item.name, item.display, item.price, "MERC", "Buy")
+    end
+
+    -- 4. Mascaras (Comerciante Ilegal)
+    for _, item in ipairs(MASK_ITEMS) do
+        createShopButton(item.name, item.display, item.price, "MASK", "Buy")
+    end
+
+    showStatus("Módulos cargados correctamente", Color3.fromRGB(100, 255, 100))
+    updateMoneyLabels()
+end
+
+-- ========== EVENTOS DE TECLADO Y CIERRE ==========
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui.Enabled = not ScreenGui.Enabled
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+        if ScreenGui.Enabled then
+            loadAllModules()
+        end
+    end
+end)
+
+-- Inicializar carga por primera vez
+loadAllModules()
