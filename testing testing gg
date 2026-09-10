@@ -1,7 +1,5 @@
-[source: 1]--[[
-    HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 4-Column Layout)
-    Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
-]]
+--[[HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 4-Column Layout)
+    Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
