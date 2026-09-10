@@ -1,5 +1,7 @@
---[[HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 4-Column Layout)
-    Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD]]
+--[[
+    HKSTUDIO ELITE HUB - V6.1 (Professional Edition + Street Life Clean 4-Column Layout)
+    Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
+]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -369,13 +371,13 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. CONSTRUCCIÓN DE LA INTERFAZ (Ventana ancha optimizada para 4 columnas)
+-- 4. CONSTRUCCIÓN DE LA INTERFAZ
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
 mainFrame.Size = UDim2.new(0, 960, 0, 480)
 mainFrame.Position = UDim2.new(Config.Settings.UIPosition.X, Config.Settings.UIPosition.XOffset, Config.Settings.UIPosition.Y, Config.Settings.UIPosition.YOffset)
 mainFrame.BackgroundColor3 = BgDark
-mainFrame.Visible = false
+mainFrame.Visible = true -- Visible por defecto para que no parezca que no pasó nada
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 local mainStroke = Instance.new("UIStroke", mainFrame)
 mainStroke.Color = CurrentThemeColor
@@ -463,6 +465,15 @@ local function CreateTab(icon, name)
         activeTab.Indicator.Visible = true
         activeTab.Frame.Visible = true
     end)
+    
+    if not activeTab then
+        activeTab = Tabs[name]
+        activeTab.Button.TextColor3 = TextWhite
+        activeTab.Button.BackgroundColor3 = BgLight
+        activeTab.Indicator.Visible = true
+        activeTab.Frame.Visible = true
+    end
+
     return scroll
 end
 
@@ -1164,7 +1175,7 @@ bulletsRefBtn.MouseButton1Click:Connect(function()
     scanStore(bulletsScroll, true)
 end)
 
--- ========== MERCANCÍA REMOTA Y MÁSCARAS REMOTAS (2 Columnas Separadas) ==========
+-- Mercancía y Máscaras
 local MERCHANT_ITEMS = {
     {name = "MentosBag", display = "Mentos", price = 300},
     {name = "Blank", display = "Fogueo", price = 1000},
@@ -1280,7 +1291,6 @@ maskRefBtn.MouseButton1Click:Connect(function()
     Notify("Street Life", "Máscaras actualizadas.")
 end)
 
--- Escaneo automático inicial al cargar el script
 task.spawn(function()
     task.wait(1)
     scanStore(weaponsScroll, false)
@@ -1288,9 +1298,7 @@ task.spawn(function()
     loadMerchantAndMasks()
 end)
 
--- ==========================================
 -- Settings Tab
--- ==========================================
 CreateButton(tabSettings, "Guardar Config", function()
     if not hasFileAPI then Notify("Settings", "File API no disponible.") return end
     local success = pcall(function()
@@ -1334,69 +1342,14 @@ end)
 
 CreateButton(tabSettings, "Unlink", function()
     Unloaded = true
-    
     if fovCircle then pcall(function() fovCircle:Remove() end) end
-
-    for _, conn in ipairs(Connections) do
-        pcall(function() conn:Disconnect() end)
-    end
+    for _, conn in ipairs(Connections) do pcall(function() conn:Disconnect() end) end
     table.clear(Connections)
-    
-    for player, esp in pairs(EspCache) do
-        pcall(function()
-            if esp.Box then esp.Box:Remove() end
-            if esp.Tracer then esp.Tracer:Remove() end
-            if esp.Info then esp.Info:Remove() end
-            if esp.Bones then
-                for _, bone in ipairs(esp.Bones) do bone:Remove() end
-            end
-        end)
-        if player.Character then
-            local hl = player.Character:FindFirstChild("HkChamsHighlight")
-            if hl then hl:Destroy() end
-        end
-    end
-    table.clear(EspCache)
-
-    pcall(function()
-        Lighting.Ambient = OriginalLighting.Ambient
-        Lighting.Brightness = OriginalLighting.Brightness
-        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
-        Lighting.FogEnd = OriginalLighting.FogEnd
-    end)
-
-    for part, mat in pairs(OriginalMaterials) do
-        if part and part.Parent then part.Material = mat end
-    end
-    table.clear(OriginalMaterials)
-
-    for decal, trans in pairs(OriginalDecalTransparencies) do
-        if decal and decal.Parent then decal.Transparency = trans end
-    end
-    table.clear(OriginalDecalTransparencies)
-
-    for tex, trans in pairs(OriginalTextureTransparencies) do
-        if tex and tex.Parent then tex.Transparency = trans end
-    end
-    table.clear(OriginalTextureTransparencies)
-
-    if LocalPlayer.Character then
-        for pName, trans in pairs(OriginalTransparencies) do
-            local p = LocalPlayer.Character:FindFirstChild(pName)
-            if p then p.Transparency = trans end
-        end
-        local head = LocalPlayer.Character:FindFirstChild("Head")
-        if head then
-            local face = head:FindFirstChild("face")
-            if face and OriginalTransparencies["Face"] then face.Transparency = OriginalTransparencies["Face"] end
-        end
-    end
-
     pcall(function() hkGui:Destroy() end)
 end)
 
 -- ==========================================
--- 6. MOTOR COMPLETO DE VISUALES Y ESP
+-- 6. ESP Y AIMBOT LOOPS
 -- ==========================================
 local function GetOrCreateEsp(player)
     if EspCache[player] then return EspCache[player] end
@@ -1433,7 +1386,7 @@ local function GetOrCreateEsp(player)
     return espData
 end
 
-local function RemoveEsp(player)
+Players.PlayerRemoving:Connect(function(player)
     if EspCache[player] then
         pcall(function()
             EspCache[player].Box:Remove()
@@ -1443,13 +1396,7 @@ local function RemoveEsp(player)
         end)
         EspCache[player] = nil
     end
-    if player.Character then
-        local hl = player.Character:FindFirstChild("HkChamsHighlight")
-        if hl then hl:Destroy() end
-    end
-end
-
-Players.PlayerRemoving:Connect(RemoveEsp)
+end)
 
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     for _, player in ipairs(Players:GetPlayers()) do
@@ -1576,9 +1523,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ==========================================
--- 7. MOTOR DE AIMBOT
--- ==========================================
 local function GetTargetPart(char)
     local pName = Config.Aimbot.TargetPart
     local part = char:FindFirstChild(pName)
@@ -1667,9 +1611,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     end
 end))
 
--- ==========================================
--- 8. TOGGLE DE INTERFAZ GENERAL
--- ==========================================
 table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == Config.Settings.Keybind then
         mainFrame.Visible = not mainFrame.Visible
