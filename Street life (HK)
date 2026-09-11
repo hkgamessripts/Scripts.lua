@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.1 (Professional Edition + Street Life & Target Fix)
+    HKSTUDIO ELITE HUB - V6.2 (Compact Edition 684x424 + Draggable + Clean 2-Column Grid)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -21,11 +21,12 @@ local Camera = workspace.CurrentCamera
 local hasDrawing = (Drawing ~= nil and type(Drawing.new) == "function")
 local hasFileAPI = (writefile ~= nil and readfile ~= nil and isfile ~= nil)
 
--- Referencias del Cajero Remoto (Street Life)
-local ATM = nil
-pcall(function()
-    ATM = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ATM")
-end)
+-- Referencias de Remotes (Street Life)
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+local ATM = Remotes and Remotes:FindFirstChild("ATM")
+local GunBuy = Remotes and Remotes:FindFirstChild("GunBuy")
+local BulletBuy = Remotes and (Remotes:FindFirstChild("BulletBuy") or Remotes:FindFirstChild("AmmoBuy") or Remotes:FindFirstChild("GunBuy"))
+local Buy = Remotes and Remotes:FindFirstChild("Buy")
 
 local Data, Money, Bank
 pcall(function()
@@ -76,7 +77,7 @@ local Config = {
     Settings = { 
         Keybind = Enum.KeyCode.RightShift,
         AntiAFK = false,
-        UIPosition = {X = 0.5, XOffset = -325, Y = 0.5, YOffset = -200}
+        UIPosition = {X = 0.5, XOffset = -342, Y = 0.5, YOffset = -212}
     }
 }
 
@@ -261,6 +262,7 @@ topText.Text = "HkStudio | FPS: -- | Ping: --"
 
 local frameAccumulator, frameCount = 0, 0
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
+    if Unloaded then return end
     frameAccumulator = frameAccumulator + dt
     frameCount = frameCount + 1
     
@@ -370,42 +372,72 @@ local function IsVisible(targetPart)
 end
 
 -- ==========================================
--- 4. CONSTRUCCIÓN DE LA INTERFAZ
+-- 4. CONSTRUCCIÓN DE LA INTERFAZ (684x424 + DRAGGABLE)
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
-mainFrame.Size = UDim2.new(0, 680, 0, 420)
+mainFrame.Size = UDim2.new(0, 684, 0, 424)
 mainFrame.Position = UDim2.new(Config.Settings.UIPosition.X, Config.Settings.UIPosition.XOffset, Config.Settings.UIPosition.Y, Config.Settings.UIPosition.YOffset)
 mainFrame.BackgroundColor3 = BgDark
-mainFrame.Visible = false
+mainFrame.Visible = true
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 local mainStroke = Instance.new("UIStroke", mainFrame)
 mainStroke.Color = CurrentThemeColor
 mainStroke.Thickness = 1.5
 
+-- Sistema de Arrastre (Draggable) para el MainFrame completo
+local dragging, dragInput, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if Unloaded then return end
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end))
+
 local sidebar = Instance.new("Frame", mainFrame)
-sidebar.Size = UDim2.new(0, 170, 1, 0)
+sidebar.Size = UDim2.new(0, 150, 1, 0)
 sidebar.BackgroundColor3 = BgDark
 sidebar.BorderSizePixel = 0
 Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
 
 local logo = Instance.new("TextLabel", sidebar)
-logo.Size = UDim2.new(1, 0, 0, 65)
+logo.Size = UDim2.new(1, 0, 0, 55)
 logo.BackgroundTransparency = 1
 logo.TextColor3 = CurrentThemeColor
 logo.Font = Enum.Font.GothamBlack
-logo.TextSize = 22
+logo.TextSize = 18
 logo.Text = "Street Life"
 
 local tabContainer = Instance.new("Frame", sidebar)
-tabContainer.Size = UDim2.new(1, -24, 1, -75)
-tabContainer.Position = UDim2.new(0, 12, 0, 65)
+tabContainer.Size = UDim2.new(1, -16, 1, -65)
+tabContainer.Position = UDim2.new(0, 8, 0, 55)
 tabContainer.BackgroundTransparency = 1
 local tabLayout = Instance.new("UIListLayout", tabContainer)
-tabLayout.Padding = UDim.new(0, 6)
+tabLayout.Padding = UDim.new(0, 5)
 
 local contentArea = Instance.new("Frame", mainFrame)
-contentArea.Size = UDim2.new(1, -185, 1, -20)
-contentArea.Position = UDim2.new(0, 175, 0, 10)
+contentArea.Size = UDim2.new(1, -162, 1, -16)
+contentArea.Position = UDim2.new(0, 156, 0, 8)
 contentArea.BackgroundTransparency = 1
 
 local Tabs = {}
@@ -413,15 +445,15 @@ local activeTab = nil
 
 local function CreateTab(icon, name)
     local btn = Instance.new("TextButton", tabContainer)
-    btn.Size = UDim2.new(1, 0, 0, 38)
+    btn.Size = UDim2.new(1, 0, 0, 34)
     btn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
     btn.AutoButtonColor = false
-    btn.Text = "    " .. icon .. "    " .. name
+    btn.Text = "  " .. icon .. "  " .. name
     btn.TextColor3 = Color3.fromRGB(150, 150, 160)
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 13
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    btn.TextSize = 12
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     
     local indicator = Instance.new("Frame", btn)
     indicator.Size = UDim2.new(0, 3, 0.5, 0)
@@ -431,17 +463,23 @@ local function CreateTab(icon, name)
     Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
 
     local scroll = Instance.new("ScrollingFrame", contentArea)
-    scroll.Size = UDim2.new(1, -10, 1, 0)
-    scroll.Position = UDim2.new(0, 10, 0, 0)
+    scroll.Size = UDim2.new(1, -4, 1, 0)
+    scroll.Position = UDim2.new(0, 4, 0, 0)
     scroll.BackgroundTransparency = 1
     scroll.ScrollBarThickness = 3
     scroll.ScrollBarImageColor3 = CurrentThemeColor
     scroll.Visible = false
 
-    local grid = Instance.new("UIGridLayout", scroll)
-    grid.CellSize = UDim2.new(0.48, 0, 0, 48)
-    grid.CellPadding = UDim2.new(0, 12, 0, 12)
-    grid.SortOrder = Enum.SortOrder.LayoutOrder
+    if name == "Street Life" then
+        local listLayout = Instance.new("UIListLayout", scroll)
+        listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        listLayout.Padding = UDim.new(0, 8)
+    else
+        local grid = Instance.new("UIGridLayout", scroll)
+        grid.CellSize = UDim2.new(0.48, 0, 0, 44)
+        grid.CellPadding = UDim2.new(0, 10, 0, 10)
+        grid.SortOrder = Enum.SortOrder.LayoutOrder
+    end
 
     Tabs[name] = {Button = btn, Frame = scroll, Indicator = indicator}
 
@@ -458,34 +496,43 @@ local function CreateTab(icon, name)
         activeTab.Indicator.Visible = true
         activeTab.Frame.Visible = true
     end)
+    
+    if not activeTab then
+        activeTab = Tabs[name]
+        activeTab.Button.TextColor3 = TextWhite
+        activeTab.Button.BackgroundColor3 = BgLight
+        activeTab.Indicator.Visible = true
+        activeTab.Frame.Visible = true
+    end
+
     return scroll
 end
 
 local function CreateToggle(parent, text, configCat, configKey, isMasterAction, customCallback)
     local base = Instance.new("Frame", parent)
     base.BackgroundColor3 = BgLight
-    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 6)
     
     local lbl = Instance.new("TextLabel", base)
-    lbl.Size = UDim2.new(1, -55, 1, 0)
-    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.Size = UDim2.new(1, -50, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
     lbl.BackgroundTransparency = 1
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.TextColor3 = TextWhite
     lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
+    lbl.TextSize = 11
     lbl.Text = text
 
     local btn = Instance.new("TextButton", base)
-    btn.Size = UDim2.new(0, 38, 0, 20)
-    btn.Position = UDim2.new(1, -48, 0.5, -10)
+    btn.Size = UDim2.new(0, 34, 0, 18)
+    btn.Position = UDim2.new(1, -42, 0.5, -9)
     btn.BackgroundColor3 = Config[configCat][configKey] and CurrentThemeColor or Color3.fromRGB(40, 40, 48)
     btn.Text = ""
     Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
     
     local knob = Instance.new("Frame", btn)
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = Config[configCat][configKey] and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = Config[configCat][configKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
@@ -493,7 +540,7 @@ local function CreateToggle(parent, text, configCat, configKey, isMasterAction, 
         Config[configCat][configKey] = not Config[configCat][configKey]
         local state = Config[configCat][configKey]
         btn.BackgroundColor3 = state and CurrentThemeColor or Color3.fromRGB(40, 40, 48)
-        TweenService:Create(knob, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
         
         if isMasterAction then
             local actionText = state and "activado" or "desactivado"
@@ -505,6 +552,7 @@ end
 
 local ActiveSlider = nil
 table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
+    if Unloaded then return end
     if ActiveSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
         local track = ActiveSlider.Track
         local min = ActiveSlider.Min
@@ -519,7 +567,7 @@ table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
         local rel = math.clamp(mx - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
         local pctNum = rel / track.AbsoluteSize.X
         fill.Size = UDim2.new(pctNum, 0, 1, 0)
-        knob.Position = UDim2.new(pctNum, -6, 0.5, -6)
+        knob.Position = UDim2.new(pctNum, -5, 0.5, -5)
         
         local value = math.floor(min + (pctNum * (max - min)))
         Config[cat][key] = value
@@ -528,6 +576,7 @@ table.insert(Connections, UserInputService.InputChanged:Connect(function(input)
 end))
 
 table.insert(Connections, UserInputService.InputEnded:Connect(function(input)
+    if Unloaded then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         ActiveSlider = nil
     end
@@ -536,21 +585,21 @@ end))
 local function CreateSlider(parent, text, configCat, configKey, min, max)
     local base = Instance.new("Frame", parent)
     base.BackgroundColor3 = BgLight
-    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 6)
     
     local lbl = Instance.new("TextLabel", base)
-    lbl.Size = UDim2.new(1, -10, 0, 16)
-    lbl.Position = UDim2.new(0, 12, 0, 6)
+    lbl.Size = UDim2.new(1, -10, 0, 15)
+    lbl.Position = UDim2.new(0, 10, 0, 5)
     lbl.BackgroundTransparency = 1
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.TextColor3 = TextWhite
     lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
+    lbl.TextSize = 11
     lbl.Text = text
 
     local valLbl = Instance.new("TextLabel", base)
-    valLbl.Size = UDim2.new(0, 40, 0, 16)
-    valLbl.Position = UDim2.new(1, -48, 0, 6)
+    valLbl.Size = UDim2.new(0, 35, 0, 15)
+    valLbl.Position = UDim2.new(1, -42, 0, 5)
     valLbl.BackgroundTransparency = 1
     valLbl.TextXAlignment = Enum.TextXAlignment.Right
     valLbl.TextColor3 = CurrentThemeColor
@@ -559,8 +608,8 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
     valLbl.Text = tostring(Config[configCat][configKey])
 
     local track = Instance.new("TextButton", base)
-    track.Size = UDim2.new(1, -24, 0, 6)
-    track.Position = UDim2.new(0, 12, 0, 30)
+    track.Size = UDim2.new(1, -20, 0, 5)
+    track.Position = UDim2.new(0, 10, 0, 26)
     track.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
     track.Text = ""
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
@@ -572,8 +621,8 @@ local function CreateSlider(parent, text, configCat, configKey, min, max)
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
     local knob = Instance.new("Frame", track)
-    knob.Size = UDim2.new(0, 12, 0, 12)
-    knob.Position = UDim2.new(pct, -6, 0.5, -6)
+    knob.Size = UDim2.new(0, 10, 0, 10)
+    knob.Position = UDim2.new(pct, -5, 0.5, -5)
     knob.BackgroundColor3 = TextWhite
     Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
@@ -588,8 +637,8 @@ local function CreateButton(parent, text, callback)
     btn.Text = text
     btn.TextColor3 = TextWhite
     btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 12
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    btn.TextSize = 11
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseButton1Click:Connect(callback)
     return btn
 end
@@ -598,12 +647,12 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
     local btn = CreateButton(parent, text .. " ▼", function() end)
     
     local listFrame = Instance.new("ScrollingFrame", hkGui)
-    listFrame.Size = UDim2.new(0, 160, 0, 130)
+    listFrame.Size = UDim2.new(0, 150, 0, 120)
     listFrame.BackgroundColor3 = BgLight
     listFrame.Visible = false
     listFrame.ZIndex = 10
     listFrame.ScrollBarThickness = 2
-    Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 6)
     local listStroke = Instance.new("UIStroke", listFrame)
     listStroke.Color = CurrentThemeColor
     
@@ -613,19 +662,19 @@ local function CreateDropdown(parent, text, getOptionsCallback, onSelectCallback
     btn.MouseButton1Click:Connect(function()
         listFrame.Visible = not listFrame.Visible
         if listFrame.Visible then
-            listFrame.Position = UDim2.new(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 6)
+            listFrame.Position = UDim2.new(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
             for _, v in pairs(listFrame:GetChildren()) do 
                 if v:IsA("TextButton") then v:Destroy() end 
             end
             local options = getOptionsCallback()
             for _, opt in ipairs(options) do
                 local item = Instance.new("TextButton", listFrame)
-                item.Size = UDim2.new(1, 0, 0, 28)
+                item.Size = UDim2.new(1, 0, 0, 26)
                 item.BackgroundTransparency = 1
                 item.Text = opt.Name
                 item.TextColor3 = TextWhite
                 item.Font = Enum.Font.Gotham
-                item.TextSize = 12
+                item.TextSize = 11
                 item.ZIndex = 11
                 item.MouseButton1Click:Connect(function()
                     listFrame.Visible = false
@@ -640,29 +689,29 @@ end
 local function CreateAtmBox(parent, placeholder, btnText, btnColor, actionType)
     local base = Instance.new("Frame", parent)
     base.BackgroundColor3 = BgLight
-    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", base).CornerRadius = UDim.new(0, 6)
     
     local input = Instance.new("TextBox", base)
-    input.Size = UDim2.new(0.58, 0, 1, -12)
-    input.Position = UDim2.new(0, 6, 0, 6)
+    input.Size = UDim2.new(0.56, 0, 1, -10)
+    input.Position = UDim2.new(0, 5, 0, 5)
     input.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
     input.TextColor3 = TextWhite
     input.Font = Enum.Font.Gotham
-    input.TextSize = 12
+    input.TextSize = 11
     input.PlaceholderText = placeholder
     input.Text = ""
     input.ClearTextOnFocus = false
-    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 4)
 
     local btn = Instance.new("TextButton", base)
-    btn.Size = UDim2.new(0.38, 0, 1, -12)
-    btn.Position = UDim2.new(0.6, 2, 0, 6)
+    btn.Size = UDim2.new(0.40, 0, 1, -10)
+    btn.Position = UDim2.new(0.58, 2, 0, 5)
     btn.BackgroundColor3 = btnColor
     btn.TextColor3 = TextWhite
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 12
+    btn.TextSize = 11
     btn.Text = btnText
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
 
     btn.MouseButton1Click:Connect(function()
         local amount = tonumber(input.Text)
@@ -714,7 +763,6 @@ CreateToggle(tabAimbot, "Draw FOV", "Aimbot", "DrawFOV", true)
 CreateToggle(tabAimbot, "Wall Check", "Aimbot", "WallCheck", false)
 CreateToggle(tabAimbot, "Team Check", "Aimbot", "TeamCheck", false)
 
--- Selector de Target corregido y sincronizado (Head -> HumanoidRootPart -> Torso)
 local targetPartsList = {"Head", "HumanoidRootPart", "UpperTorso"}
 local targetIndex = 1
 for i, v in ipairs(targetPartsList) do
@@ -749,7 +797,7 @@ CreateToggle(tabLocal, "Fullbright", "Local", "Fullbright", true, function(state
     Lighting.GlobalShadows = not state
 end)
 
-CreateToggle(tabLocal, "BoostFPS (Limpiar Mapa)", "Local", "BoostFPS", true, function(state)
+CreateToggle(tabLocal, "BoostFPS", "Local", "BoostFPS", true, function(state)
     if state then
         task.spawn(function()
             local count = 0
@@ -818,6 +866,7 @@ CreateToggle(tabLocal, "Fake Korblox", "Local", "FakeKorblox", true, function(st
 end)
 
 table.insert(Connections, LocalPlayer.CharacterAdded:Connect(function(newChar)
+    if Unloaded then return end
     task.wait(0.6)
     if Config.Local.FakeKorblox then
         ApplyKorblox(true)
@@ -845,7 +894,7 @@ CreateToggle(tabLocal, "Fake Headless", "Local", "FakeHeadless", true, function(
     end
 end)
 
-CreateDropdown(tabLocal, "Teleport a Jugador", 
+CreateDropdown(tabLocal, "Teleport", 
     function()
         local list = {}
         for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then table.insert(list, p) end end
@@ -868,9 +917,428 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
     end
 )
 
--- Street Life Tab
-CreateAtmBox(tabStreetLife, "Monto a retirar", "Retirar", Color3.fromRGB(180, 80, 50), "Withdraw")
-CreateAtmBox(tabStreetLife, "Monto a depositar", "Depositar", Color3.fromRGB(50, 180, 80), "Deposit")
+-- ==========================================
+-- STREET LIFE: ATM + SECCIONES EN 2 FILAS DE 2 COLUMNAS (ADAPTADO A 684x424)
+-- ==========================================
+
+-- 1. Fila de ATM
+local atmRow = Instance.new("Frame", tabStreetLife)
+atmRow.Size = UDim2.new(1, 0, 0, 36)
+atmRow.BackgroundTransparency = 1
+
+local atmGrid = Instance.new("UIGridLayout", atmRow)
+atmGrid.CellSize = UDim2.new(0.48, 0, 1, 0)
+atmGrid.CellPadding = UDim2.new(0, 10, 0, 0)
+atmGrid.SortOrder = Enum.SortOrder.LayoutOrder
+
+CreateAtmBox(atmRow, "Monto retirar", "Retirar", Color3.fromRGB(180, 80, 50), "Withdraw")
+CreateAtmBox(atmRow, "Monto depositar", "Depositar", Color3.fromRGB(50, 180, 80), "Deposit")
+
+-- 2. Fila 1 de Tiendas (Armas y Balas - Altura reducida a 165px para que entre perfecto)
+local shopRow1 = Instance.new("Frame", tabStreetLife)
+shopRow1.Size = UDim2.new(1, 0, 0, 165)
+shopRow1.BackgroundTransparency = 1
+
+local shopGrid1 = Instance.new("UIGridLayout", shopRow1)
+shopGrid1.CellSize = UDim2.new(0.485, 0, 1, 0)
+shopGrid1.CellPadding = UDim2.new(0, 10, 0, 0)
+shopGrid1.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- 3. Fila 2 de Tiendas (Mercancía y Máscaras)
+local shopRow2 = Instance.new("Frame", tabStreetLife)
+shopRow2.Size = UDim2.new(1, 0, 0, 165)
+shopRow2.BackgroundTransparency = 1
+
+local shopGrid2 = Instance.new("UIGridLayout", shopRow2)
+shopGrid2.CellSize = UDim2.new(0.485, 0, 1, 0)
+shopGrid2.CellPadding = UDim2.new(0, 10, 0, 0)
+shopGrid2.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function CreateShopSection(parent, titleText)
+    local frame = Instance.new("Frame", parent)
+    frame.BackgroundColor3 = BgLight
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+    
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(0.52, 0, 0, 26)
+    title.Position = UDim2.new(0, 6, 0, 3)
+    title.BackgroundTransparency = 1
+    title.Text = titleText
+    title.TextColor3 = CurrentThemeColor
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 9
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local refBtn = Instance.new("TextButton", frame)
+    refBtn.Size = UDim2.new(0, 48, 0, 20)
+    refBtn.Position = UDim2.new(1, -52, 0, 5)
+    refBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    refBtn.TextColor3 = TextWhite
+    refBtn.Font = Enum.Font.GothamBold
+    refBtn.TextSize = 8
+    refBtn.Text = "Refrescar"
+    Instance.new("UICorner", refBtn).CornerRadius = UDim.new(0, 4)
+    
+    local sf = Instance.new("ScrollingFrame", frame)
+    sf.Size = UDim2.new(1, -8, 1, -32)
+    sf.Position = UDim2.new(0, 4, 0, 28)
+    sf.BackgroundTransparency = 1
+    sf.ScrollBarThickness = 3
+    sf.ScrollBarImageColor3 = CurrentThemeColor
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    
+    local layout = Instance.new("UIListLayout", sf)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 4)
+    
+    local pad = Instance.new("UIPadding", sf)
+    pad.PaddingTop = UDim.new(0, 2)
+    pad.PaddingBottom = UDim.new(0, 2)
+    pad.PaddingLeft = UDim.new(0, 2)
+    pad.PaddingRight = UDim.new(0, 2)
+    
+    return frame, sf, refBtn
+end
+
+local weaponsFrame, weaponsScroll, weaponsRefBtn = CreateShopSection(shopRow1, "ARMAS REMOTAS")
+local bulletsFrame, bulletsScroll, bulletsRefBtn = CreateShopSection(shopRow1, "BALAS REMOTAS")
+local mercFrame, mercScroll, mercRefBtn = CreateShopSection(shopRow2, "MERCANCÍA")
+local maskFrame, maskScroll, maskRefBtn = CreateShopSection(shopRow2, "MÁSCARAS")
+
+local scannedItems = {Weapons = {}, Bullets = {}}
+local itemButtons = {Weapons = {}, Bullets = {}}
+
+local function clearList(isBullet)
+    local tbl = isBullet and itemButtons.Bullets or itemButtons.Weapons
+    for _, btn in ipairs(tbl) do btn:Destroy() end
+    if isBullet then itemButtons.Bullets = {} else itemButtons.Weapons = {} end
+end
+
+local function isAmmoItem(name)
+    local lower = name:lower()
+    return lower:find("ammo") or lower:find("bullet") or lower:find("balas") or lower:find("cargador") or lower:find("mag") or lower:find("municion")
+end
+
+local function createItemButton(scrollingFrame, itemName, price, isBullet)
+    local order = #scrollingFrame:GetChildren()
+
+    local btn = Instance.new("Frame")
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = order
+    btn.Parent = scrollingFrame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.40, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 4, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = itemName
+    nameLabel.TextColor3 = TextWhite
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 8
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = btn
+
+    local priceLabel = Instance.new("TextLabel")
+    priceLabel.Size = UDim2.new(0.30, 0, 1, 0)
+    priceLabel.Position = UDim2.new(0.40, 0, 0, 0)
+    priceLabel.BackgroundTransparency = 1
+    priceLabel.Text = "$" .. formatNumber(price)
+    priceLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    priceLabel.Font = Enum.Font.GothamBold
+    priceLabel.TextSize = 8
+    priceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    priceLabel.Parent = btn
+
+    local buyBtn = Instance.new("TextButton")
+    buyBtn.Size = UDim2.new(0, 38, 0, 20)
+    buyBtn.Position = UDim2.new(1, -40, 0.5, -10)
+    buyBtn.BackgroundColor3 = isBullet and Color3.fromRGB(45, 130, 160) or Color3.fromRGB(45, 160, 75)
+    buyBtn.TextColor3 = TextWhite
+    buyBtn.Font = Enum.Font.GothamBold
+    buyBtn.TextSize = 7
+    buyBtn.Text = "Comprar"
+    buyBtn.Parent = btn
+
+    local buyCorner = Instance.new("UICorner")
+    buyCorner.CornerRadius = UDim.new(0, 4)
+    buyCorner.Parent = buyBtn
+
+    buyBtn.MouseButton1Click:Connect(function()
+        if isBullet then
+            if BulletBuy then
+                BulletBuy:FireServer(itemName, price)
+                Notify("Street Life", "Comprando balas: " .. itemName)
+            else
+                Notify("Street Life", "Remoto de Balas no encontrado")
+            end
+        else
+            if GunBuy then
+                GunBuy:FireServer(itemName, price)
+                Notify("Street Life", "Comprando arma: " .. itemName)
+            else
+                Notify("Street Life", "Remoto GunBuy no encontrado")
+            end
+        end
+    end)
+
+    table.insert(isBullet and itemButtons.Bullets or itemButtons.Weapons, btn)
+end
+
+local function scanCacheForType(scrollingFrame, isBullet)
+    local cacheName = isBullet and "RemoteBulletData" or "RemoteWeaponData"
+    local cache = ReplicatedStorage:FindFirstChild(cacheName)
+    if not cache and isBullet then
+        cache = ReplicatedStorage:FindFirstChild("RemoteWeaponData")
+    end
+    if not cache then return 0 end
+    
+    local children = cache:GetChildren()
+    if #children == 0 then return 0 end
+    
+    table.sort(children, function(a, b) return a.Name < b.Name end)
+    
+    local count = 0
+    local tracker = isBullet and scannedItems.Bullets or scannedItems.Weapons
+    
+    for _, entry in ipairs(children) do
+        if entry:IsA("IntValue") then
+            local name = entry.Name
+            local isAmmo = isAmmoItem(name)
+            local match = (isBullet and isAmmo) or (not isBullet and not isAmmo)
+            if cacheName == "RemoteWeaponData" and isBullet then
+                match = isAmmo
+            elseif cacheName == "RemoteWeaponData" and not isBullet then
+                match = not isAmmo
+            end
+
+            if match and not tracker[name] then
+                tracker[name] = true
+                createItemButton(scrollingFrame, name, entry.Value, isBullet)
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
+local function scanWall(wall, scrollingFrame, isBullet)
+    local count = 0
+    local tracker = isBullet and scannedItems.Bullets or scannedItems.Weapons
+    for _, slot in ipairs(wall:GetChildren()) do
+        local tool = slot:FindFirstChild("Tool")
+        local price = slot:FindFirstChild("Price")
+        if tool and price then
+            local name = tool.Value
+            local cost = price.Value
+            if name and name ~= "" then
+                local isAmmo = isAmmoItem(name)
+                if (isBullet and isAmmo) or (not isBullet and not isAmmo) then
+                    if not tracker[name] then
+                        tracker[name] = true
+                        createItemButton(scrollingFrame, name, cost, isBullet)
+                        count = count + 1
+                    end
+                end
+            end
+        end
+    end
+    return count
+end
+
+local function scanStreamingForType(scrollingFrame, isBullet)
+    local map = workspace:FindFirstChild("Map")
+    if not map then return 0 end
+    
+    local found = 0
+    for _, gsName in ipairs({"GunStore", "GunStore2"}) do
+        local gs = map:FindFirstChild(gsName)
+        if gs then
+            local wall = gs:FindFirstChild("Wall")
+            local gwall = gs:FindFirstChild("GWall")
+            if wall then found = found + scanWall(wall, scrollingFrame, isBullet) end
+            if gwall then found = found + scanWall(gwall, scrollingFrame, isBullet) end
+        end
+    end
+    return found
+end
+
+local function scanStore(scrollingFrame, isBullet)
+    local typeName = isBullet and "Balas" or "Armas"
+    scannedItems[isBullet and "Bullets" or "Weapons"] = {}
+    clearList(isBullet)
+    
+    local found = scanCacheForType(scrollingFrame, isBullet)
+    if found == 0 then
+        local gunStorePositions = {}
+        local track = workspace:FindFirstChild("POI") and workspace.POI:FindFirstChild("Track")
+        if track then
+            local gs1 = track:FindFirstChild("GunStore")
+            if gs1 and gs1:IsA("BasePart") then table.insert(gunStorePositions, gs1.Position) end
+            local gs2 = track:FindFirstChild("GunStore2")
+            if gs2 and gs2:IsA("BasePart") then table.insert(gunStorePositions, gs2.Position) end
+        end
+        
+        for _, pos in ipairs(gunStorePositions) do
+            pcall(function() LocalPlayer:RequestStreamAroundAsync(pos, 10) end)
+        end
+        
+        task.wait(1.5)
+        found = scanStreamingForType(scrollingFrame, isBullet)
+        if found == 0 then
+            for i = 1, 3 do
+                task.wait(1)
+                found = scanStreamingForType(scrollingFrame, isBullet)
+                if found > 0 then break end
+            end
+        end
+        if found == 0 then
+            found = scanCacheForType(scrollingFrame, isBullet)
+        end
+    end
+    
+    if found > 0 then
+        Notify("Street Life", found .. " " .. typeName .. " cargadas.")
+    else
+        Notify("Street Life", "No se encontraron " .. typeName .. ".")
+    end
+end
+
+weaponsRefBtn.MouseButton1Click:Connect(function()
+    scanStore(weaponsScroll, false)
+end)
+
+bulletsRefBtn.MouseButton1Click:Connect(function()
+    scanStore(bulletsScroll, true)
+end)
+
+local MERCHANT_ITEMS = {
+    {name = "MentosBag", display = "Mentos", price = 300},
+    {name = "Blank", display = "Fogueo", price = 1000},
+    {name = "C4", display = "C4", price = 2000},
+    {name = "Bat", display = "Bate", price = 750},
+    {name = "Knife", display = "Cuchillo", price = 500},
+    {name = "DuffleBag", display = "Maleta", price = 500},
+    {name = "LockPick", display = "Ganzúa", price = 500},
+    {name = "Firework", display = "Petardo", price = 500},
+}
+
+local MASK_ITEMS = {
+    {name = "Balaclava", display = "Balaclava", price = 50},
+    {name = "SkiMask", display = "Pasamontañas", price = 50},
+    {name = "Bandana", display = "Bandana", price = 50},
+    {name = "HackerMask", display = "Hacker", price = 75},
+    {name = "BlueSki", display = "Esquí Azul", price = 75},
+    {name = "RedSki", display = "Esquí Rojo", price = 75},
+    {name = "ClownMask", display = "Payaso", price = 75},
+    {name = "GhostFace", display = "Ghost", price = 100},
+    {name = "JasonMask", display = "Jason", price = 100},
+}
+
+local mercButtons = {}
+local maskButtons = {}
+
+local function clearMercLists()
+    for _, btn in ipairs(mercButtons) do btn:Destroy() end
+    mercButtons = {}
+    for _, btn in ipairs(maskButtons) do btn:Destroy() end
+    maskButtons = {}
+end
+
+local function createGenericStoreItem(scrollingFrame, itemName, displayName, price, buttonList)
+    local order = #scrollingFrame:GetChildren()
+
+    local btn = Instance.new("Frame")
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = order
+    btn.Parent = scrollingFrame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.42, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 4, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = displayName
+    nameLabel.TextColor3 = TextWhite
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 8
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = btn
+
+    local priceLabel = Instance.new("TextLabel")
+    priceLabel.Size = UDim2.new(0.30, 0, 1, 0)
+    priceLabel.Position = UDim2.new(0.42, 0, 0, 0)
+    priceLabel.BackgroundTransparency = 1
+    priceLabel.Text = "$" .. formatNumber(price)
+    priceLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    priceLabel.Font = Enum.Font.GothamBold
+    priceLabel.TextSize = 8
+    priceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    priceLabel.Parent = btn
+
+    local buyBtn = Instance.new("TextButton")
+    buyBtn.Size = UDim2.new(0, 38, 0, 20)
+    buyBtn.Position = UDim2.new(1, -40, 0.5, -10)
+    buyBtn.BackgroundColor3 = Color3.fromRGB(160, 50, 50)
+    buyBtn.TextColor3 = TextWhite
+    buyBtn.Font = Enum.Font.GothamBold
+    buyBtn.TextSize = 7
+    buyBtn.Text = "Comprar"
+    buyBtn.Parent = btn
+
+    local buyCorner = Instance.new("UICorner")
+    buyCorner.CornerRadius = UDim.new(0, 4)
+    buyCorner.Parent = buyBtn
+
+    buyBtn.MouseButton1Click:Connect(function()
+        if Buy then
+            Buy:FireServer(itemName, price)
+            Notify("Street Life", "Comprando " .. displayName .. "...")
+        else
+            Notify("Street Life", "Remote Buy no encontrado")
+        end
+    end)
+
+    table.insert(buttonList, btn)
+end
+
+local function loadMerchantAndMasks()
+    clearMercLists()
+    for _, item in ipairs(MERCHANT_ITEMS) do
+        createGenericStoreItem(mercScroll, item.name, item.display, item.price, mercButtons)
+    end
+    for _, item in ipairs(MASK_ITEMS) do
+        createGenericStoreItem(maskScroll, item.name, item.display, item.price, maskButtons)
+    end
+end
+
+mercRefBtn.MouseButton1Click:Connect(function()
+    loadMerchantAndMasks()
+    Notify("Street Life", "Mercancía actualizada.")
+end)
+
+maskRefBtn.MouseButton1Click:Connect(function()
+    loadMerchantAndMasks()
+    Notify("Street Life", "Máscaras actualizadas.")
+end)
+
+task.spawn(function()
+    task.wait(1)
+    scanStore(weaponsScroll, false)
+    scanStore(bulletsScroll, true)
+    loadMerchantAndMasks()
+end)
 
 -- Settings Tab
 CreateButton(tabSettings, "Guardar Config", function()
@@ -917,68 +1385,55 @@ end)
 CreateButton(tabSettings, "Unlink", function()
     Unloaded = true
     
-    if fovCircle then pcall(function() fovCircle:Remove() end) end
-
+    -- 1. Desconectar todos los eventos activos registrados en la tabla Connections
     for _, conn in ipairs(Connections) do
-        pcall(function() conn:Disconnect() end)
+        pcall(function()
+            conn:Disconnect()
+        end)
     end
     table.clear(Connections)
-    
+
+    -- 2. Limpiar elementos gráficos creados mediante la librería Drawing (FOV Circle y ESP)
+    if fovCircle then
+        pcall(function()
+            fovCircle:Remove()
+        end)
+    end
+
     for player, esp in pairs(EspCache) do
         pcall(function()
             if esp.Box then esp.Box:Remove() end
             if esp.Tracer then esp.Tracer:Remove() end
             if esp.Info then esp.Info:Remove() end
             if esp.Bones then
-                for _, bone in ipairs(esp.Bones) do bone:Remove() end
+                for _, bone in ipairs(esp.Bones) do
+                    bone:Remove()
+                end
             end
         end)
-        if player.Character then
-            local hl = player.Character:FindFirstChild("HkChamsHighlight")
-            if hl then hl:Destroy() end
-        end
     end
     table.clear(EspCache)
 
+    -- 3. Limpiar chams activos en los personajes
+    for _, player in ipairs(Players:GetPlayers()) do
+        pcall(function()
+            if player.Character then
+                local hl = player.Character:FindFirstChild("HkChamsHighlight")
+                if hl then hl:Destroy() end
+            end
+        end)
+    end
+
+    -- 4. Destruir la interfaz gráfica principal (ScreenGui)
     pcall(function()
-        Lighting.Ambient = OriginalLighting.Ambient
-        Lighting.Brightness = OriginalLighting.Brightness
-        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
-        Lighting.FogEnd = OriginalLighting.FogEnd
+        if hkGui then
+            hkGui:Destroy()
+        end
     end)
-
-    for part, mat in pairs(OriginalMaterials) do
-        if part and part.Parent then part.Material = mat end
-    end
-    table.clear(OriginalMaterials)
-
-    for decal, trans in pairs(OriginalDecalTransparencies) do
-        if decal and decal.Parent then decal.Transparency = trans end
-    end
-    table.clear(OriginalDecalTransparencies)
-
-    for tex, trans in pairs(OriginalTextureTransparencies) do
-        if tex and tex.Parent then tex.Transparency = trans end
-    end
-    table.clear(OriginalTextureTransparencies)
-
-    if LocalPlayer.Character then
-        for pName, trans in pairs(OriginalTransparencies) do
-            local p = LocalPlayer.Character:FindFirstChild(pName)
-            if p then p.Transparency = trans end
-        end
-        local head = LocalPlayer.Character:FindFirstChild("Head")
-        if head then
-            local face = head:FindFirstChild("face")
-            if face and OriginalTransparencies["Face"] then face.Transparency = OriginalTransparencies["Face"] end
-        end
-    end
-
-    pcall(function() hkGui:Destroy() end)
 end)
 
 -- ==========================================
--- 6. MOTOR COMPLETO DE VISUALES Y ESP
+-- 6. ESP Y AIMBOT LOOPS
 -- ==========================================
 local function GetOrCreateEsp(player)
     if EspCache[player] then return EspCache[player] end
@@ -989,16 +1444,8 @@ local function GetOrCreateEsp(player)
         Tracer = Drawing.new("Line"),
         Info = Drawing.new("Text"),
         Bones = {
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
-            Drawing.new("Line"),
+            Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"),
+            Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"), Drawing.new("Line"),
         }
     }
 
@@ -1023,7 +1470,7 @@ local function GetOrCreateEsp(player)
     return espData
 end
 
-local function RemoveEsp(player)
+Players.PlayerRemoving:Connect(function(player)
     if EspCache[player] then
         pcall(function()
             EspCache[player].Box:Remove()
@@ -1033,15 +1480,10 @@ local function RemoveEsp(player)
         end)
         EspCache[player] = nil
     end
-    if player.Character then
-        local hl = player.Character:FindFirstChild("HkChamsHighlight")
-        if hl then hl:Destroy() end
-    end
-end
-
-Players.PlayerRemoving:Connect(RemoveEsp)
+end)
 
 table.insert(Connections, RunService.RenderStepped:Connect(function()
+    if Unloaded then return end
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local esp = GetOrCreateEsp(player)
@@ -1122,16 +1564,9 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         local rightLowerLeg = char:FindFirstChild("RightLowerLeg")
 
                         local bonePairs = {
-                            {head, upperTorso},
-                            {upperTorso, lowerTorso},
-                            {upperTorso, leftUpperArm},
-                            {leftUpperArm, leftLowerArm},
-                            {upperTorso, rightUpperArm},
-                            {rightUpperArm, rightLowerArm},
-                            {lowerTorso, leftUpperLeg},
-                            {leftUpperLeg, leftLowerLeg},
-                            {lowerTorso, rightUpperLeg},
-                            {rightUpperLeg, rightLowerLeg}
+                            {head, upperTorso}, {upperTorso, lowerTorso}, {upperTorso, leftUpperArm},
+                            {leftUpperArm, leftLowerArm}, {upperTorso, rightUpperArm}, {rightUpperArm, rightLowerArm},
+                            {lowerTorso, leftUpperLeg}, {leftUpperLeg, leftLowerLeg}, {lowerTorso, rightUpperLeg}, {rightUpperLeg, rightLowerLeg}
                         }
 
                         for i, pair in ipairs(bonePairs) do
@@ -1173,9 +1608,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ==========================================
--- 7. MOTOR DE AIMBOT (Con Soporte R6/R15 Torso)
--- ==========================================
 local function GetTargetPart(char)
     local pName = Config.Aimbot.TargetPart
     local part = char:FindFirstChild(pName)
@@ -1190,6 +1622,7 @@ local function GetTargetPart(char)
 end
 
 table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
+    if Unloaded then return end
     if not Config.Aimbot.Enabled then
         lockedTargetPart = nil
         TargetHudFrame.Visible = false
@@ -1220,7 +1653,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
                 local char = player.Character
                 local humanoid = char and char:FindFirstChildOfClass("Humanoid")
                 if char and humanoid and humanoid.Health > 0 then
-                    local targetPart = GetTargetPart(char)
+                    local targetPart = GetTargetForm and GetTargetPart(char) or GetTargetPart(char)
                     if targetPart and IsVisible(targetPart) then
                         local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
                         if onScreen then
@@ -1243,7 +1676,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
         if humanoid then
             local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
             targetHealthFill.Size = UDim2.new(healthPct, 0, 1, 0)
-            targetHealthText.Text = math.floor(healthPct * 100) .. "%"
+            targetHealthText.Text = math.floor(healthPct * 100) + "%"
             targetNameLbl.Text = targetChar.Name
             TargetHudFrame.Visible = Config.Aimbot.DrawFOV
         end
@@ -1264,10 +1697,8 @@ table.insert(Connections, RunService.RenderStepped:Connect(function(dt)
     end
 end))
 
--- ==========================================
--- 8. TOGGLE DE INTERFAZ GENERAL
--- ==========================================
 table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if Unloaded then return end
     if input.KeyCode == Config.Settings.Keybind then
         mainFrame.Visible = not mainFrame.Visible
     end
