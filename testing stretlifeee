@@ -374,7 +374,7 @@ end
 -- 4. CONSTRUCCIÓN DE LA INTERFAZ
 -- ==========================================
 local mainFrame = Instance.new("Frame", hkGui)
-mainFrame.Size = UDim2.new(0, 960, 0, 480)
+mainFrame.Size = UDim2.new(0, 684, 0, 424)
 mainFrame.Position = UDim2.new(Config.Settings.UIPosition.X, Config.Settings.UIPosition.XOffset, Config.Settings.UIPosition.Y, Config.Settings.UIPosition.YOffset)
 mainFrame.BackgroundColor3 = BgDark
 mainFrame.Visible = true
