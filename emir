@@ -1,0 +1,436 @@
+-- AUTOS REMOTO - Versión Completa (PC + Móvil)
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Evitar duplicados al re-inyectar
+pcall(function()
+    if CoreGui:FindFirstChild("AutosRemotoUI") then
+        CoreGui.AutosRemotoUI:Destroy()
+    end
+    if CoreGui:FindFirstChild("AutosRemotoMobileButton") then
+        CoreGui.AutosRemotoMobileButton:Destroy()
+    end
+end)
+
+-- ========== CONTENEDOR SEGURO ==========
+local function getContainer()
+    local success, container = pcall(function()
+        return CoreGui
+    end)
+    if success and container then
+        return container
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local TargetParent = getContainer()
+
+-- ========== GUI PRINCIPAL ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AutosRemotoUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Enabled = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = TargetParent
+
+local Background = Instance.new("Frame")
+Background.Size = UDim2.new(1, 0, 1, 0)
+Background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Background.BackgroundTransparency = 0.55
+Background.BorderSizePixel = 0
+Background.Parent = ScreenGui
+
+local Panel = Instance.new("Frame")
+Panel.Size = UDim2.new(0, 520, 0, 560)
+Panel.Position = UDim2.new(0.5, -260, 0.5, -280)
+Panel.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Panel.BorderSizePixel = 0
+Panel.Parent = Background
+
+local PanelCorner = Instance.new("UICorner")
+PanelCorner.CornerRadius = UDim.new(0, 14)
+PanelCorner.Parent = Panel
+
+local PanelStroke = Instance.new("UIStroke")
+PanelStroke.Color = Color3.fromRGB(50, 100, 150)
+PanelStroke.Thickness = 2
+PanelStroke.Parent = Panel
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 38)
+Title.BackgroundTransparency = 1
+Title.Text = "AUTOS REMOTO"
+Title.TextColor3 = Color3.fromRGB(100, 180, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 24
+Title.Parent = Panel
+
+-- Dedicatoria a Emir
+local Dedication = Instance.new("TextLabel")
+Dedication.Size = UDim2.new(1, 0, 0, 15)
+Dedication.Position = UDim2.new(0, 0, 0, 36)
+Dedication.BackgroundTransparency = 1
+Dedication.Text = "para mi amigo, Emir"
+Dedication.TextColor3 = Color3.fromRGB(150, 150, 150)
+Dedication.Font = Enum.Font.GothamItalic
+Dedication.TextSize = 11
+Dedication.Parent = Panel
+
+local Separator = Instance.new("Frame")
+Separator.Size = UDim2.new(0.9, 0, 0, 2)
+Separator.Position = UDim2.new(0.05, 0, 0, 55)
+Separator.BackgroundColor3 = Color3.fromRGB(50, 100, 150)
+Separator.BorderSizePixel = 0
+Separator.Parent = Panel
+
+local InfoLabel = Instance.new("TextLabel")
+InfoLabel.Size = UDim2.new(0.7, 0, 0, 25)
+InfoLabel.Position = UDim2.new(0.05, 0, 0, 62)
+InfoLabel.BackgroundTransparency = 1
+InfoLabel.Text = "Autos disponibles: 0"
+InfoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+InfoLabel.Font = Enum.Font.GothamSemibold
+InfoLabel.TextSize = 14
+InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfoLabel.Parent = Panel
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Size = UDim2.new(0, 90, 0, 25)
+RefreshBtn.Position = UDim2.new(0.75, 0, 0, 62)
+RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 80, 120)
+RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshBtn.Font = Enum.Font.GothamBold
+RefreshBtn.TextSize = 12
+RefreshBtn.Text = "Refrescar"
+RefreshBtn.Parent = Panel
+
+local RefreshCorner = Instance.new("UICorner")
+RefreshCorner.CornerRadius = UDim.new(0, 5)
+RefreshCorner.Parent = RefreshBtn
+
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(0.9, 0, 0, 410)
+ScrollingFrame.Position = UDim2.new(0.05, 0, 0, 94)
+ScrollingFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+ScrollingFrame.BorderSizePixel = 0
+ScrollingFrame.ScrollBarThickness = 5
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScrollingFrame.Parent = Panel
+
+local ScrollCorner = Instance.new("UICorner")
+ScrollCorner.CornerRadius = UDim.new(0, 8)
+ScrollCorner.Parent = ScrollingFrame
+
+local CarLayout = Instance.new("UIListLayout")
+CarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CarLayout.Padding = UDim.new(0, 5)
+CarLayout.Parent = ScrollingFrame
+
+local CarPadding = Instance.new("UIPadding")
+CarPadding.PaddingTop = UDim.new(0, 6)
+CarPadding.PaddingBottom = UDim.new(0, 6)
+CarPadding.PaddingLeft = UDim.new(0, 6)
+CarPadding.PaddingRight = UDim.new(0, 6)
+CarPadding.Parent = ScrollingFrame
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
+StatusLabel.Position = UDim2.new(0.05, 0, 0, 512)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = ""
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 13
+StatusLabel.Parent = Panel
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0.9, 0, 0, 30)
+CloseBtn.Position = UDim2.new(0.05, 0, 0, 530)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(70, 40, 40)
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Text = "Cerrar"
+CloseBtn.Parent = Panel
+
+local CloseBtnCorner = Instance.new("UICorner")
+CloseBtnCorner.CornerRadius = UDim.new(0, 6)
+CloseBtnCorner.Parent = CloseBtn
+
+-- ========== BOTÓN FLOTANTE MÓVIL (hkstudiozz) ==========
+local MobileGui = Instance.new("ScreenGui")
+MobileGui.Name = "AutosRemotoMobileButton"
+MobileGui.ResetOnSpawn = false
+MobileGui.IgnoreGuiInset = true
+MobileGui.Enabled = true
+MobileGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+MobileGui.Parent = TargetParent
+
+local OpenButton = Instance.new("TextButton")
+OpenButton.Size = UDim2.new(0, 60, 0, 60)
+OpenButton.Position = UDim2.new(0, 20, 0.4, -30)
+OpenButton.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+OpenButton.TextColor3 = Color3.fromRGB(100, 180, 255)
+OpenButton.Font = Enum.Font.GothamBold
+OpenButton.TextSize = 11
+OpenButton.Text = "hkstudiozz"
+OpenButton.TextWrapped = true
+OpenButton.BorderSizePixel = 0
+OpenButton.Parent = MobileGui
+
+local OpenButtonCorner = Instance.new("UICorner")
+OpenButtonCorner.CornerRadius = UDim.new(1, 0)
+OpenButtonCorner.Parent = OpenButton
+
+local OpenButtonStroke = Instance.new("UIStroke")
+OpenButtonStroke.Color = Color3.fromRGB(50, 100, 150)
+OpenButtonStroke.Thickness = 2
+OpenButtonStroke.Parent = OpenButton
+
+-- ========== FUNCIONES UI ==========
+local function showStatus(msg, color)
+    StatusLabel.Text = msg
+    StatusLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    task.delay(3, function()
+        if StatusLabel.Text == msg then StatusLabel.Text = "" end
+    end)
+end
+
+-- ========== SISTEMA DE AUTOS ==========
+local carButtons = {}
+local orderCounter = 0
+
+local function clearCarList()
+    for _, btn in ipairs(carButtons) do
+        if btn then btn:Destroy() end
+    end
+    carButtons = {}
+    orderCounter = 0
+end
+
+local function getDriveSeat(car)
+    if not car then return nil end
+    return car:FindFirstChildOfClass("VehicleSeat")
+end
+
+local function isCarOccupied(car)
+    local seat = getDriveSeat(car)
+    if seat and seat.Occupant then
+        return true
+    end
+    return false
+end
+
+local function waitForDriveSeat(car, timeout)
+    local seat = car:FindFirstChildOfClass("VehicleSeat")
+    if seat then return seat end
+
+    local elapsed = 0
+    while not seat and elapsed < (timeout or 10) do
+        task.wait(0.1)
+        elapsed = elapsed + 0.1
+        seat = car:FindFirstChildOfClass("VehicleSeat")
+    end
+    return seat
+end
+
+local function teleportToCar(car)
+    if isCarOccupied(car) then
+        showStatus("Auto ocupado - No disponible", Color3.fromRGB(255, 100, 100))
+        return
+    end
+
+    local char = LocalPlayer.Character
+    if not char then
+        showStatus("No tienes personaje", Color3.fromRGB(255, 100, 100))
+        return
+    end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not humanoid then
+        showStatus("Personaje no valido", Color3.fromRGB(255, 100, 100))
+        return
+    end
+
+    showStatus("Teletransportando...", Color3.fromRGB(100, 200, 255))
+
+    task.spawn(function()
+        local success, carPos = pcall(function()
+            return car:GetPivot().Position
+        end)
+
+        if not success or not carPos then
+            showStatus("No se pudo obtener la posicion", Color3.fromRGB(255, 100, 100))
+            return
+        end
+
+        pcall(function()
+            LocalPlayer:RequestStreamAroundAsync(carPos, 15)
+        end)
+
+        local seat = waitForDriveSeat(car, 10)
+        if not seat then
+            showStatus("No se pudo cargar el auto", Color3.fromRGB(255, 100, 100))
+            return
+        end
+
+        if seat.Occupant then
+            showStatus("El auto esta ocupado", Color3.fromRGB(255, 100, 100))
+            return
+        end
+
+        hrp.CFrame = seat.CFrame * CFrame.new(0, 3, 0)
+        task.wait(0.3)
+        seat:Sit(humanoid)
+
+        showStatus("Subiste al auto!", Color3.fromRGB(100, 255, 100))
+    end)
+end
+
+local function createCarButton(car)
+    orderCounter = orderCounter + 1
+
+    local owner = car:GetAttribute("Owner") or "Desconocido"
+    local carType = car:GetAttribute("CarType") or "Auto"
+    local locked = car:GetAttribute("Locked")
+    local occupied = isCarOccupied(car)
+    local seatExists = getDriveSeat(car) ~= nil
+
+    local btn = Instance.new("Frame")
+    btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = orderCounter
+    btn.Parent = ScrollingFrame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = btn
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.3, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0, 8, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = carType
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 14
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = btn
+
+    local ownerLabel = Instance.new("TextLabel")
+    ownerLabel.Size = UDim2.new(0.25, 0, 1, 0)
+    ownerLabel.Position = UDim2.new(0.3, 0, 0, 0)
+    ownerLabel.BackgroundTransparency = 1
+    ownerLabel.Text = owner
+    ownerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    ownerLabel.Font = Enum.Font.Gotham
+    ownerLabel.TextSize = 13
+    ownerLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ownerLabel.Parent = btn
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0.18, 0, 1, 0)
+    statusLabel.Position = UDim2.new(0.55, 0, 0, 0)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 11
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = btn
+
+    if occupied then
+        statusLabel.Text = "OCUPADO"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+    elseif not seatExists then
+        statusLabel.Text = "SIN CARGAR"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 180, 50)
+    elseif locked then
+        statusLabel.Text = "BLOQUEADO"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 180, 50)
+    else
+        statusLabel.Text = "LIBRE"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+
+    local actionBtn = Instance.new("TextButton")
+    actionBtn.Size = UDim2.new(0, 80, 0, 35)
+    actionBtn.Position = UDim2.new(1, -88, 0.5, -17)
+    actionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    actionBtn.Font = Enum.Font.GothamBold
+    actionBtn.TextSize = 13
+    actionBtn.Parent = btn
+
+    local actionCorner = Instance.new("UICorner")
+    actionCorner.CornerRadius = UDim.new(0, 5)
+    actionCorner.Parent = actionBtn
+
+    if occupied then
+        actionBtn.Text = "Ocupado"
+        actionBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
+        actionBtn.AutoButtonColor = false
+    else
+        actionBtn.Text = "Subir"
+        actionBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 200)
+        actionBtn.MouseButton1Click:Connect(function()
+            teleportToCar(car)
+        end)
+    end
+
+    table.insert(carButtons, btn)
+end
+
+-- ========== REFRESCAR LISTA ==========
+local function refreshList()
+    clearCarList()
+
+    local vehicles = Workspace:FindFirstChild("Vehicles")
+    if not vehicles then
+        showStatus("No hay autos en el juego", Color3.fromRGB(255, 100, 100))
+        InfoLabel.Text = "Autos disponibles: 0"
+        return
+    end
+
+    local count = 0
+    for _, car in ipairs(vehicles:GetChildren()) do
+        if car:IsA("Model") then
+            createCarButton(car)
+            count = count + 1
+        end
+    end
+
+    InfoLabel.Text = "Autos disponibles: " .. count
+    showStatus(count .. " autos encontrados", Color3.fromRGB(100, 255, 100))
+end
+
+-- ========== EVENTOS ==========
+OpenButton.MouseButton1Click:Connect(function()
+    ScreenGui.Enabled = not ScreenGui.Enabled
+    if ScreenGui.Enabled then
+        refreshList()
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui.Enabled = false
+end)
+
+RefreshBtn.MouseButton1Click:Connect(function()
+    refreshList()
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+        if ScreenGui.Enabled then
+            refreshList()
+        end
+    end
+end)
