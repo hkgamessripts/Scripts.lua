@@ -62,7 +62,7 @@ PanelStroke.Thickness = 2
 PanelStroke.Parent = Panel
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 38)
+Title.Size = UDim2.new(1, 0, 0, 50)
 Title.BackgroundTransparency = 1
 Title.Text = "AUTOS REMOTO"
 Title.TextColor3 = Color3.fromRGB(100, 180, 255)
@@ -70,27 +70,16 @@ Title.Font = Enum.Font.GothamBold
 Title.TextSize = 24
 Title.Parent = Panel
 
--- Dedicatoria a Emir
-local Dedication = Instance.new("TextLabel")
-Dedication.Size = UDim2.new(1, 0, 0, 15)
-Dedication.Position = UDim2.new(0, 0, 0, 36)
-Dedication.BackgroundTransparency = 1
-Dedication.Text = "para mi amigo, Emir"
-Dedication.TextColor3 = Color3.fromRGB(150, 150, 150)
-Dedication.Font = Enum.Font.GothamItalic
-Dedication.TextSize = 11
-Dedication.Parent = Panel
-
 local Separator = Instance.new("Frame")
 Separator.Size = UDim2.new(0.9, 0, 0, 2)
-Separator.Position = UDim2.new(0.05, 0, 0, 55)
+Separator.Position = UDim2.new(0.05, 0, 0, 50)
 Separator.BackgroundColor3 = Color3.fromRGB(50, 100, 150)
 Separator.BorderSizePixel = 0
 Separator.Parent = Panel
 
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(0.7, 0, 0, 25)
-InfoLabel.Position = UDim2.new(0.05, 0, 0, 62)
+InfoLabel.Position = UDim2.new(0.05, 0, 0, 58)
 InfoLabel.BackgroundTransparency = 1
 InfoLabel.Text = "Autos disponibles: 0"
 InfoLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
@@ -101,7 +90,7 @@ InfoLabel.Parent = Panel
 
 local RefreshBtn = Instance.new("TextButton")
 RefreshBtn.Size = UDim2.new(0, 90, 0, 25)
-RefreshBtn.Position = UDim2.new(0.75, 0, 0, 62)
+RefreshBtn.Position = UDim2.new(0.75, 0, 0, 58)
 RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 80, 120)
 RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 RefreshBtn.Font = Enum.Font.GothamBold
@@ -115,7 +104,7 @@ RefreshCorner.Parent = RefreshBtn
 
 local ScrollingFrame = Instance.new("ScrollingFrame")
 ScrollingFrame.Size = UDim2.new(0.9, 0, 0, 410)
-ScrollingFrame.Position = UDim2.new(0.05, 0, 0, 94)
+ScrollingFrame.Position = UDim2.new(0.05, 0, 0, 90)
 ScrollingFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 ScrollingFrame.BorderSizePixel = 0
 ScrollingFrame.ScrollBarThickness = 5
@@ -141,7 +130,7 @@ CarPadding.Parent = ScrollingFrame
 
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
-StatusLabel.Position = UDim2.new(0.05, 0, 0, 512)
+StatusLabel.Position = UDim2.new(0.05, 0, 0, 508)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = ""
 StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
