@@ -1,5 +1,5 @@
 --[[
-    HKSTUDIO ELITE HUB - V5.9 (Professional Edition + Street Life Remote Weapons & Bullets)
+    HKSTUDIO ELITE HUB - V5.9 (Professional Edition + Street Life Remote Weapons, Bullets, Illegal Merchant & Masks)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
 ]]
 
@@ -26,6 +26,7 @@ local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
 local ATM = Remotes and Remotes:FindFirstChild("ATM")
 local GunBuy = Remotes and Remotes:FindFirstChild("GunBuy")
 local BulletBuy = Remotes and (Remotes:FindFirstChild("BulletBuy") or Remotes:FindFirstChild("AmmoBuy") or Remotes:FindFirstChild("GunBuy"))
+local Buy = Remotes and Remotes:FindFirstChild("Buy") -- Remote para Comerciante Ilegal y Mascaras
 
 local Data, Money, Bank
 pcall(function()
@@ -874,7 +875,7 @@ CreateDropdown(tabLocal, "Teleport a Jugador",
 )
 
 -- ==========================================
--- STREET LIFE: ATM + ARMAS Y BALAS REMOTO
+-- STREET LIFE: ATM + ARMAS Y BALAS REMOTO + COMERCIANTE ILEGAL Y MASCARAS
 -- ==========================================
 
 -- 1. Fila de ATM (Retirar y Depositar)
@@ -890,7 +891,7 @@ atmGrid.SortOrder = Enum.SortOrder.LayoutOrder
 CreateAtmBox(atmRow, "Monto a retirar", "Retirar", Color3.fromRGB(180, 80, 50), "Withdraw")
 CreateAtmBox(atmRow, "Monto a depositar", "Depositar", Color3.fromRGB(50, 180, 80), "Deposit")
 
--- 2. Fila de Tiendas Remotas (Armas y Balas abajo del ATM, lado a lado)
+-- 2. Fila 1 de Tiendas Remotas (Armas y Balas)
 local shopRow = Instance.new("Frame", tabStreetLife)
 shopRow.Size = UDim2.new(1, 0, 0, 280)
 shopRow.BackgroundTransparency = 1
@@ -899,6 +900,16 @@ local shopGrid = Instance.new("UIGridLayout", shopRow)
 shopGrid.CellSize = UDim2.new(0.48, 0, 1, 0)
 shopGrid.CellPadding = UDim2.new(0, 12, 0, 0)
 shopGrid.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- 3. Fila 2 de Tiendas Remotas (Comerciante ilegal y Mascaras - Justo debajo, mismo ancho y largo)
+local shopRow2 = Instance.new("Frame", tabStreetLife)
+shopRow2.Size = UDim2.new(1, 0, 0, 280)
+shopRow2.BackgroundTransparency = 1
+
+local shopGrid2 = Instance.new("UIGridLayout", shopRow2)
+shopGrid2.CellSize = UDim2.new(0.48, 0, 1, 0)
+shopGrid2.CellPadding = UDim2.new(0, 12, 0, 0)
+shopGrid2.SortOrder = Enum.SortOrder.LayoutOrder
 
 local function CreateShopSection(parent, titleText)
     local frame = Instance.new("Frame", parent)
@@ -950,14 +961,19 @@ end
 local weaponsFrame, weaponsScroll, weaponsRefBtn = CreateShopSection(shopRow, "ARMAS REMOTO")
 local bulletsFrame, bulletsScroll, bulletsRefBtn = CreateShopSection(shopRow, "BALAS REMOTO")
 
--- Lógica de escaneo y compra de Armas y Balas (Misma estructura robusta)
-local scannedItems = {Weapons = {}, Bullets = {}}
-local itemButtons = {Weapons = {}, Bullets = {}}
+local merchantFrame, merchantScroll, merchantRefBtn = CreateShopSection(shopRow2, "COMERCIANTE ILEGAL")
+local masksFrame, masksScroll, masksRefBtn = CreateShopSection(shopRow2, "MASCARAS")
 
-local function clearList(isBullet)
-    local tbl = isBullet and itemButtons.Bullets or itemButtons.Weapons
-    for _, btn in ipairs(tbl) do btn:Destroy() end
-    if isBullet then itemButtons.Bullets = {} else itemButtons.Weapons = {} end
+-- Lógica de escaneo y compra de Armas y Balas (Misma estructura robusta)
+local scannedItems = {Weapons = {}, Bullets = {}, Merchant = {}, Masks = {}}
+local itemButtons = {Weapons = {}, Bullets = {}, Merchant = {}, Masks = {}}
+
+local function clearList(categoryKey)
+    local tbl = itemButtons[categoryKey]
+    if tbl then
+        for _, btn in ipairs(tbl) do btn:Destroy() end
+        itemButtons[categoryKey] = {}
+    end
 end
 
 local function isAmmoItem(name)
@@ -965,7 +981,7 @@ local function isAmmoItem(name)
     return lower:find("ammo") or lower:find("bullet") or lower:find("balas") or lower:find("cargador") or lower:find("mag") or lower:find("municion")
 end
 
-local function createItemButton(scrollingFrame, itemName, price, isBullet)
+local function createItemButton(scrollingFrame, itemName, displayName, price, isBullet, categoryKey)
     local order = #scrollingFrame:GetChildren()
 
     local btn = Instance.new("Frame")
@@ -983,7 +999,7 @@ local function createItemButton(scrollingFrame, itemName, price, isBullet)
     nameLabel.Size = UDim2.new(0.48, 0, 1, 0)
     nameLabel.Position = UDim2.new(0, 6, 0, 0)
     nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = itemName
+    nameLabel.Text = displayName or itemName
     nameLabel.TextColor3 = TextWhite
     nameLabel.Font = Enum.Font.GothamSemibold
     nameLabel.TextSize = 11
@@ -1004,7 +1020,7 @@ local function createItemButton(scrollingFrame, itemName, price, isBullet)
     local buyBtn = Instance.new("TextButton")
     buyBtn.Size = UDim2.new(0, 60, 0, 24)
     buyBtn.Position = UDim2.new(1, -66, 0.5, -12)
-    buyBtn.BackgroundColor3 = isBullet and Color3.fromRGB(45, 130, 160) or Color3.fromRGB(45, 160, 75)
+    buyBtn.BackgroundColor3 = (categoryKey == "Merchant" and Color3.fromRGB(160, 50, 50)) or (categoryKey == "Masks" and Color3.fromRGB(120, 60, 160)) or (isBullet and Color3.fromRGB(45, 130, 160) or Color3.fromRGB(45, 160, 75))
     buyBtn.TextColor3 = TextWhite
     buyBtn.Font = Enum.Font.GothamBold
     buyBtn.TextSize = 11
@@ -1016,7 +1032,14 @@ local function createItemButton(scrollingFrame, itemName, price, isBullet)
     buyCorner.Parent = buyBtn
 
     buyBtn.MouseButton1Click:Connect(function()
-        if isBullet then
+        if categoryKey == "Merchant" or categoryKey == "Masks" then
+            if Buy then
+                Buy:FireServer(itemName, price)
+                Notify("Street Life", "Comprando " .. (displayName or itemName) .. "...")
+            else
+                Notify("Street Life", "RemoteEvent Buy no encontrado")
+            end
+        elseif isBullet then
             if BulletBuy then
                 BulletBuy:FireServer(itemName, price)
                 Notify("Street Life", "Comprando balas: " .. itemName)
@@ -1033,7 +1056,7 @@ local function createItemButton(scrollingFrame, itemName, price, isBullet)
         end
     end)
 
-    table.insert(isBullet and itemButtons.Bullets or itemButtons.Weapons, btn)
+    table.insert(itemButtons[categoryKey], btn)
 end
 
 local function scanCacheForType(scrollingFrame, isBullet)
@@ -1050,7 +1073,8 @@ local function scanCacheForType(scrollingFrame, isBullet)
     table.sort(children, function(a, b) return a.Name < b.Name end)
     
     local count = 0
-    local tracker = isBullet and scannedItems.Bullets or scannedItems.Weapons
+    local categoryKey = isBullet and "Bullets" or "Weapons"
+    local tracker = scannedItems[categoryKey]
     
     for _, entry in ipairs(children) do
         if entry:IsA("IntValue") then
@@ -1065,7 +1089,7 @@ local function scanCacheForType(scrollingFrame, isBullet)
 
             if match and not tracker[name] then
                 tracker[name] = true
-                createItemButton(scrollingFrame, name, entry.Value, isBullet)
+                createItemButton(scrollingFrame, name, name, entry.Value, isBullet, categoryKey)
                 count = count + 1
             end
         end
@@ -1075,7 +1099,8 @@ end
 
 local function scanWall(wall, scrollingFrame, isBullet)
     local count = 0
-    local tracker = isBullet and scannedItems.Bullets or scannedItems.Weapons
+    local categoryKey = isBullet and "Bullets" or "Weapons"
+    local tracker = scannedItems[categoryKey]
     for _, slot in ipairs(wall:GetChildren()) do
         local tool = slot:FindFirstChild("Tool")
         local price = slot:FindFirstChild("Price")
@@ -1087,7 +1112,7 @@ local function scanWall(wall, scrollingFrame, isBullet)
                 if (isBullet and isAmmo) or (not isBullet and not isAmmo) then
                     if not tracker[name] then
                         tracker[name] = true
-                        createItemButton(scrollingFrame, name, cost, isBullet)
+                        createItemButton(scrollingFrame, name, name, cost, isBullet, categoryKey)
                         count = count + 1
                     end
                 end
@@ -1115,9 +1140,10 @@ local function scanStreamingForType(scrollingFrame, isBullet)
 end
 
 local function scanStore(scrollingFrame, isBullet)
+    local categoryKey = isBullet and "Bullets" or "Weapons"
     local typeName = isBullet and "Balas" or "Armas"
-    scannedItems[isBullet and "Bullets" or "Weapons"] = {}
-    clearList(isBullet)
+    scannedItems[categoryKey] = {}
+    clearList(categoryKey)
     
     local found = scanCacheForType(scrollingFrame, isBullet)
     if found == 0 then
@@ -1155,6 +1181,54 @@ local function scanStore(scrollingFrame, isBullet)
     end
 end
 
+-- Datos hardcodeados para Comerciante Ilegal y Mascaras
+local MERCHANT_ITEMS = {
+	{name = "MentosBag", display = "Bolsa de Mentos", price = 300},
+	{name = "Blank", display = "Cartucho Fogueo", price = 1000},
+	{name = "C4", display = "C4", price = 2000},
+	{name = "Bat", display = "Bate", price = 750},
+	{name = "Knife", display = "Cuchillo", price = 500},
+	{name = "DuffleBag", display = "Maleta", price = 500},
+	{name = "LockPick", display = "Ganzúa", price = 500},
+	{name = "Firework", display = "Petardo", price = 500},
+}
+
+local MASK_ITEMS = {
+	{name = "Balaclava", display = "Pasamontañas", price = 50},
+	{name = "SkiMask", display = "Pasamontañas de Esquí", price = 50},
+	{name = "Bandana", display = "Bandana", price = 50},
+	{name = "HackerMask", display = "Máscara de Hacker", price = 75},
+	{name = "BlueSki", display = "Esquí Azul", price = 75},
+	{name = "RedSki", display = "Esquí Rojo", price = 75},
+	{name = "ClownMask", display = "Máscara de Payaso", price = 75},
+	{name = "GhostFace", display = "Cara Fantasma", price = 100},
+	{name = "JasonMask", display = "Máscara de Jason", price = 100},
+}
+
+local function loadMerchantItems()
+    scannedItems.Merchant = {}
+    clearList("Merchant")
+    for _, item in ipairs(MERCHANT_ITEMS) do
+        if not scannedItems.Merchant[item.name] then
+            scannedItems.Merchant[item.name] = true
+            createItemButton(merchantScroll, item.name, item.display, item.price, false, "Merchant")
+        end
+    end
+    Notify("Street Life", "Comerciante ilegal cargado.")
+end
+
+local function loadMaskItems()
+    scannedItems.Masks = {}
+    clearList("Masks")
+    for _, item in ipairs(MASK_ITEMS) do
+        if not scannedItems.Masks[item.name] then
+            scannedItems.Masks[item.name] = true
+            createItemButton(masksScroll, item.name, item.display, item.price, false, "Masks")
+        end
+    end
+    Notify("Street Life", "Máscaras cargadas.")
+end
+
 weaponsRefBtn.MouseButton1Click:Connect(function()
     scanStore(weaponsScroll, false)
 end)
@@ -1163,11 +1237,21 @@ bulletsRefBtn.MouseButton1Click:Connect(function()
     scanStore(bulletsScroll, true)
 end)
 
+merchantRefBtn.MouseButton1Click:Connect(function()
+    loadMerchantItems()
+end)
+
+masksRefBtn.MouseButton1Click:Connect(function()
+    loadMaskItems()
+end)
+
 -- Escaneo automático inicial al cargar el script
 task.spawn(function()
     task.wait(1)
     scanStore(weaponsScroll, false)
     scanStore(bulletsScroll, true)
+    loadMerchantItems()
+    loadMaskItems()
 end)
 
 -- ==========================================
