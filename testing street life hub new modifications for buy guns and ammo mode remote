@@ -1,3 +1,110 @@
+-- ============================================================
+-- 🔐 KEY SYSTEM
+-- ============================================================
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local KeyScreenGui = Instance.new("ScreenGui")
+KeyScreenGui.Name = "HKStudioKeySystem"
+KeyScreenGui.ResetOnSpawn = false
+KeyScreenGui.IgnoreGuiInset = true
+KeyScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+KeyScreenGui.Parent = game:GetService("CoreGui")
+
+local KeyFrame = Instance.new("Frame")
+KeyFrame.Size = UDim2.new(0, 350, 0, 200)
+KeyFrame.Position = UDim2.new(0.5, -175, 0.5, -100)
+KeyFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+KeyFrame.Parent = KeyScreenGui
+
+local KeyCorner = Instance.new("UICorner")
+KeyCorner.CornerRadius = UDim.new(0, 12)
+KeyCorner.Parent = KeyFrame
+
+local KeyStroke = Instance.new("UIStroke")
+KeyStroke.Color = Color3.fromRGB(80, 80, 90)
+KeyStroke.Thickness = 1.5
+KeyStroke.Parent = KeyFrame
+
+local KeyTitle = Instance.new("TextLabel")
+KeyTitle.Size = UDim2.new(1, -30, 0, 35)
+KeyTitle.Position = UDim2.new(0, 15, 0, 15)
+KeyTitle.BackgroundTransparency = 1
+KeyTitle.Text = "HKStudio Key System"
+KeyTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyTitle.Font = Enum.Font.GothamBold
+KeyTitle.TextSize = 20
+KeyTitle.Parent = KeyFrame
+
+local KeyBox = Instance.new("TextBox")
+KeyBox.Size = UDim2.new(1, -40, 0, 40)
+KeyBox.Position = UDim2.new(0, 20, 0, 65)
+KeyBox.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+KeyBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+KeyBox.PlaceholderText = "Enter key..."
+KeyBox.Text = ""
+KeyBox.Font = Enum.Font.Gotham
+KeyBox.TextSize = 14
+KeyBox.ClearTextOnFocus = false
+KeyBox.Parent = KeyFrame
+
+local KeyBoxCorner = Instance.new("UICorner")
+KeyBoxCorner.CornerRadius = UDim.new(0, 8)
+KeyBoxCorner.Parent = KeyBox
+
+local VerifyButton = Instance.new("TextButton")
+VerifyButton.Size = UDim2.new(1, -40, 0, 40)
+VerifyButton.Position = UDim2.new(0, 20, 0, 115)
+VerifyButton.BackgroundColor3 = Color3.fromRGB(55, 120, 220)
+VerifyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+VerifyButton.Text = "VERIFY"
+VerifyButton.Font = Enum.Font.GothamBold
+VerifyButton.TextSize = 14
+VerifyButton.Parent = KeyFrame
+
+local VerifyCorner = Instance.new("UICorner")
+VerifyCorner.CornerRadius = UDim.new(0, 8)
+VerifyCorner.Parent = VerifyButton
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -40, 0, 25)
+StatusLabel.Position = UDim2.new(0, 20, 1, -30)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = ""
+StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 12
+StatusLabel.Parent = KeyFrame
+
+local KeyVerified = false
+
+VerifyButton.MouseButton1Click:Connect(function()
+    if KeyBox.Text == "hkstudiozzbeta1" then
+        KeyVerified = true
+        StatusLabel.Text = "Key correcta!"
+        StatusLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+
+        task.wait(0.3)
+        KeyScreenGui:Destroy()
+    else
+        StatusLabel.Text = "Key incorrecta."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+    end
+end)
+
+KeyBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        VerifyButton:Activate()
+    end
+end)
+
+repeat
+    task.wait()
+until KeyVerified
+
+
 --[[
     HKSTUDIO ELITE HUB - V5.9 (Professional Edition + Street Life Remote Weapons, Bullets, Illegal Merchant & Masks)
     Architecture: Modular, Event-Driven Cleanup, Hardware Accelerated ESP & Target HUD
